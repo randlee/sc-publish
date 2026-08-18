@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import re
 import subprocess
 import sys
 import tempfile
@@ -231,6 +232,7 @@ class InstallValuesTests(unittest.TestCase):
                 list((consumer / ".github" / "workflows").glob("*.yml"))
                 + list((consumer / ".github" / "scripts").glob("*.py"))
                 + list((consumer / ".github" / "scripts").glob("*.sh"))
+                + list((consumer / ".github" / "actions").rglob("action.yml"))
             )
             for path in packaged_runtime_files:
                 self.assertNotRegex(
@@ -238,6 +240,20 @@ class InstallValuesTests(unittest.TestCase):
                     r"(?<![./\\w])scripts/",
                     path.relative_to(consumer).as_posix(),
                 )
+
+            pending = list((consumer / ".github" / "workflows").glob("*.yml"))
+            seen: set[Path] = set()
+            while pending:
+                source = pending.pop()
+                if source in seen:
+                    continue
+                seen.add(source)
+                for action_name in re.findall(
+                    r"uses:\s+\./\.github/actions/([^\s]+)", source.read_text(encoding="utf-8")
+                ):
+                    action = consumer / ".github" / "actions" / action_name / "action.yml"
+                    self.assertTrue(action.is_file(), action.relative_to(consumer).as_posix())
+                    pending.append(action)
 
             helper = subprocess.run(
                 [sys.executable, str(artifacts), "validate-publish-order", "--help"],
