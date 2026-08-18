@@ -233,7 +233,7 @@ class InstallValuesTests(unittest.TestCase):
         consumer-local scripts/ path.
         """
 
-        if not (INSTALLER.parent / "release" / "publish-artifacts.toml.j2").is_file():
+        if not (INSTALLER.parent / ".sc-publish-source-root").is_file():
             self.skipTest("installed consumers do not re-run the package source installer")
 
         with tempfile.TemporaryDirectory() as directory:

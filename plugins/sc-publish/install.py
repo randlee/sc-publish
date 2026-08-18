@@ -19,6 +19,7 @@ if TYPE_CHECKING:
 
 
 PACKAGE_ROOT = Path(__file__).resolve().parent
+SOURCE_ROOT_MARKER = ".sc-publish-source-root"
 TEMPLATES = {
     Path("release/publish-channel-contracts.toml.j2"): Path(
         "release/publish-channel-contracts.toml"
@@ -240,6 +241,7 @@ def package_files() -> list[Path]:
         path
         for path in PACKAGE_ROOT.rglob("*")
         if path.is_file()
+        and path.name != SOURCE_ROOT_MARKER
         and "__pycache__" not in path.parts
         and path.suffix != ".pyc"
     )
