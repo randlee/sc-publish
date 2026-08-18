@@ -15,8 +15,8 @@ from pathlib import Path
 
 PACKAGE_ROOT = Path(__file__).resolve().parent
 TEMPLATES = {
-    Path(".github/templates/publish-channel-contracts.toml.j2"): Path(
-        ".github/publish-channel-contracts.toml"
+    Path("release/publish-channel-contracts.toml.j2"): Path(
+        "release/publish-channel-contracts.toml"
     ),
 }
 
