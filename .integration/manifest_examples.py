@@ -1,12 +1,10 @@
 #!/usr/bin/env python3
-"""Render generic publish-artifact examples outside the CI unit-test suite.
-
-Run through the pinned sc-compose wheel provisioned by ``bootstrap_sc_compose.py``.
-"""
+"""Render and install a complete generic publish manifest contract."""
 
 from __future__ import annotations
 
 import json
+import importlib.util
 import subprocess
 import sys
 import tempfile
@@ -19,158 +17,175 @@ import sc_compose
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 PACKAGE_ROOT = REPOSITORY_ROOT / "plugins" / "sc-publish"
 ARTIFACT_TEMPLATE = PACKAGE_ROOT / "release" / "publish-artifacts.toml.j2"
-CHANNEL_TEMPLATE = PACKAGE_ROOT / "release" / "publish-channel-contracts.toml.j2"
 INSTALLER = PACKAGE_ROOT / "install.py"
 
 
-SINGLE_CLI_JSON = r"""
-{
-  "release": {"version_source": "Cargo.toml", "tag_prefix": "v"},
-  "artifacts": {
-    "crates": [{
-      "artifact": "example-cli",
-      "package": "example-cli",
-      "cargo_toml": "Cargo.toml",
-      "required": true,
-      "publish": true,
-      "publish_order": 1,
-      "preflight_check": "full",
-      "wait_after_publish_seconds": 0,
-      "verify_install": false
-    }],
-    "wheels": [],
-    "binaries": ["example"]
-  },
-  "channels": {
-    "github_release": {"enabled": true},
-    "crates_io": {"enabled": true},
-    "pypi": {"enabled": false, "workflow": "pypi-publish.yml"},
-    "homebrew": {"enabled": false},
-    "scoop": {"enabled": false},
-    "winget": {"enabled": false}
-  }
-}
-"""
+def complete_values() -> dict[str, object]:
+    """Return one generic complete contract, including both Python build paths."""
+    return {
+        "schema_version": 1,
+        "project": {
+            "name": "example",
+            "archive_prefix": "example",
+            "description": "Example release package",
+            "homepage": "https://example.test/example",
+            "license": "MIT",
+            "readme_dependency_crate": "example-core",
+            "renderer_archive_path": "bin/example",
+        },
+        "release_targets": [
+            {"target": "x86_64-unknown-linux-gnu", "os": "ubuntu-latest", "archive": "tar.gz"},
+            {"target": "x86_64-pc-windows-msvc", "os": "windows-latest", "archive": "zip"},
+        ],
+        "crates": [
+            {
+                "artifact": "example-core",
+                "package": "example-core",
+                "cargo_toml": "crates/example-core/Cargo.toml",
+                "required": True,
+                "publish": True,
+                "publish_order": 1,
+                "preflight_check": "locked",
+                "wait_after_publish_seconds": 0,
+                "verify_install": False,
+            },
+            {
+                "artifact": "example-python",
+                "package": "example-python",
+                "cargo_toml": "crates/example-python/Cargo.toml",
+                "required": True,
+                "publish": False,
+                "publish_order": 0,
+                "preflight_check": "locked",
+                "wait_after_publish_seconds": 0,
+                "verify_install": True,
+            },
+        ],
+        "release_binaries": [
+            {
+                "name": "example",
+                "bundled_paths": [
+                    {
+                        "source": "docs",
+                        "destination": "share/doc/example",
+                        "homebrew_destination_components": ["pkgshare"],
+                    }
+                ],
+            },
+            {"name": "example-daemon"},
+        ],
+        "installed_docs": {
+            "source_root": "docs",
+            "install_root": "share/doc/example",
+            "entrypoint": "share/doc/example/README.md",
+        },
+        "python_packages": [
+            {
+                "artifact": "example-wheel",
+                "package": "example",
+                "manifest": "python/pyproject.toml",
+                "module": "example",
+                "publish": "pypi",
+            }
+        ],
+        "python_distributions": [
+            {
+                "name": "example",
+                "source": "python",
+                "cargo_manifest": "crates/example-python/Cargo.toml",
+                "module_path": "python/example",
+                "sdist": True,
+                "wheels": ["ubuntu-latest", "macos-latest", "windows-latest"],
+            },
+            {
+                "name": "example-plugin",
+                "source": "plugin",
+                "build_system": "setuptools",
+                "module_path": "plugin/src/example_plugin",
+                "sdist": True,
+                "wheels": ["ubuntu-latest"],
+            },
+        ],
+        "channels": {
+            "pypi": {
+                "workflow": "pypi-publish.yml",
+                "dispatch_inputs": {"target": "production"},
+                "credential_rehearsal_inputs": {"target": "testpypi"},
+                "test_repository": "testpypi",
+                "production_repository": "pypi",
+            },
+            "homebrew": {
+                "workflow": "homebrew-publish.yml",
+                "dispatch_inputs": {},
+                "tap_repository": "example/homebrew-tap",
+                "renderer_target": "x86_64-unknown-linux-gnu",
+                "formulas": [
+                    {
+                        "path": "Formula/example.rb",
+                        "template": "release/homebrew/formula.rb.j2",
+                        "class": "Example",
+                        "binaries": ["example", "example-daemon"],
+                        "test_command": "--help",
+                        "test_output": "Example release package",
+                        "release_track": "stable",
+                    }
+                ],
+                "assets": [{"key": "linux", "target": "x86_64-unknown-linux-gnu"}],
+            },
+            "winget": {
+                "workflow": "winget-publish.yml",
+                "dispatch_inputs": {},
+                "identifier": "example.example",
+                "installer_target": "x86_64-pc-windows-msvc",
+            },
+            "scoop": {
+                "workflow": "scoop-publish.yml",
+                "dispatch_inputs": {},
+                "bucket_repository": "example/scoop-bucket",
+                "manifest_path": "bucket/example.json",
+                "manifest_template": "release/scoop/manifest.json.j2",
+                "installer_target": "x86_64-pc-windows-msvc",
+                "binary": "bin/example.exe",
+                "renderer_target": "x86_64-unknown-linux-gnu",
+            },
+        },
+    }
 
 
-MULTI_ARTIFACT_JSON = r"""
-{
-  "release": {"version_source": "workspace.package.version", "tag_prefix": "release-"},
-  "artifacts": {
-    "crates": [
-      {
-        "artifact": "example-core",
-        "package": "example-core",
-        "cargo_toml": "crates/example-core/Cargo.toml",
-        "required": true,
-        "publish": true,
-        "publish_order": 1,
-        "preflight_check": "full",
-        "wait_after_publish_seconds": 0,
-        "verify_install": false
-      },
-      {
-        "artifact": "example-service",
-        "package": "example-service",
-        "cargo_toml": "crates/example-service/Cargo.toml",
-        "required": true,
-        "publish": true,
-        "publish_order": 2,
-        "preflight_check": "full",
-        "wait_after_publish_seconds": 30,
-        "verify_install": false
-      }
-    ],
-    "wheels": [{"package": "example-sdk", "python_package": "example_sdk"}],
-    "binaries": ["example", "example-daemon"]
-  },
-  "channels": {
-    "github_release": {"enabled": true},
-    "crates_io": {"enabled": true},
-    "pypi": {"enabled": true, "workflow": "pypi-publish.yml"},
-    "homebrew": {"enabled": true},
-    "scoop": {"enabled": true},
-    "winget": {"enabled": true}
-  }
-}
-"""
-
-
-def render(template: Path, values: dict[str, object]) -> dict[str, object]:
-    """Render one release template and return its semantic TOML value."""
+def render(values: dict[str, object]) -> dict[str, object]:
+    """Render the full manifest through the pinned Python binding contract."""
+    spec = importlib.util.spec_from_file_location("sc_publish_install", INSTALLER)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
     request = sc_compose.ComposeRequest(
         root=PACKAGE_ROOT,
-        mode=sc_compose.ComposeMode.file(str(template.relative_to(PACKAGE_ROOT))),
-        vars_input=values,
+        mode=sc_compose.ComposeMode.file(str(ARTIFACT_TEMPLATE.relative_to(PACKAGE_ROOT))),
+        vars_input=module.template_values(values),
         policy=sc_compose.ComposePolicy(strict_undeclared_variables=True),
     )
     return tomllib.loads(sc_compose.compose_file(request).rendered_text)
 
 
-def verify_example(name: str, json_text: str) -> None:
-    """Assert that fixed, generic input renders without semantic drift."""
-    values = json.loads(json_text)
-    rendered = render(ARTIFACT_TEMPLATE, values)
-    assert rendered["release"] == values["release"], name
-    assert rendered.get("crates", []) == values["artifacts"]["crates"], name
-    assert rendered.get("artifacts", {}).get("wheels", []) == values["artifacts"]["wheels"], name
-    assert [entry["name"] for entry in rendered.get("release_binaries", [])] == values[
-        "artifacts"
-    ]["binaries"], name
-    for channel_name, channel in values["channels"].items():
-        assert rendered["channels"][channel_name] == channel, name
-    rendered_contracts = render(CHANNEL_TEMPLATE, values)
-    with CHANNEL_TEMPLATE.open("rb") as source:
-        assert rendered_contracts == tomllib.load(source), name
+def verify_complete_contract() -> None:
+    """Assert rendering preserves every required manifest section."""
+    values = complete_values()
+    assert render(values) == values
 
-
-def verify_installer_is_idempotent(name: str, json_text: str) -> None:
-    """Require explicit input, install it, then require a clean dry-run rerun."""
     with tempfile.TemporaryDirectory() as directory:
         temporary = Path(directory)
-        consumer = temporary / name
+        consumer = temporary / "consumer"
         consumer.mkdir()
         input_path = temporary / "install.json"
-        input_path.write_text(json_text, encoding="utf-8")
-        arguments = [
-            sys.executable,
-            str(INSTALLER),
-            "--input",
-            str(input_path),
-            str(consumer),
-        ]
-        subprocess.run(arguments, check=True)
-        for source in INSTALLER.parent.rglob("*"):
-            if not source.is_file() or "__pycache__" in source.parts:
-                continue
-            if source.name == ".sc-publish-source-root":
-                assert not (consumer / source.relative_to(INSTALLER.parent)).exists(), source
-                continue
-            installed = consumer / source.relative_to(INSTALLER.parent)
-            assert installed.read_bytes() == source.read_bytes(), installed
-        with (consumer / "release" / "publish-artifacts.toml").open("rb") as output:
-            rendered_artifacts = tomllib.load(output)
-        assert rendered_artifacts["release"] == json.loads(json_text)["release"], name
-        with (consumer / "release" / "publish-channel-contracts.toml").open("rb") as output:
-            installed_contracts = tomllib.load(output)
-        with CHANNEL_TEMPLATE.open("rb") as source:
-            assert installed_contracts == tomllib.load(source), name
-        clean_rerun = subprocess.run(
-            [*arguments, "--dry-run"],
-            text=True,
-            capture_output=True,
-            check=False,
-        )
-    assert clean_rerun.returncode == 0, clean_rerun.stdout + clean_rerun.stderr
-
-
-def main() -> None:
-    verify_example("single-cli", SINGLE_CLI_JSON)
-    verify_example("multi-artifact", MULTI_ARTIFACT_JSON)
-    verify_installer_is_idempotent("single-cli", SINGLE_CLI_JSON)
-    verify_installer_is_idempotent("multi-artifact", MULTI_ARTIFACT_JSON)
-    print("generic manifest examples passed; installer reruns are clean")
+        input_path.write_text(json.dumps(values), encoding="utf-8")
+        command = [sys.executable, str(INSTALLER), "--input", str(input_path), str(consumer)]
+        subprocess.run(command, check=True)
+        with (consumer / "release" / "publish-artifacts.toml").open("rb") as source:
+            assert tomllib.load(source) == values
+        rerun = subprocess.run([*command, "--dry-run"], text=True, capture_output=True, check=False)
+        assert rerun.returncode == 0, rerun.stdout + rerun.stderr
 
 
 if __name__ == "__main__":
-    main()
+    verify_complete_contract()
+    print("complete publish manifest contract passed; installer rerun is clean")

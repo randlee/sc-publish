@@ -24,15 +24,28 @@ jobs:
         run: |
           "$SC_COMPOSE_PYTHON" -m unittest discover -s plugins/sc-publish/.github/scripts/tests -p 'test_install.py'
           "$SC_COMPOSE_PYTHON" -m unittest discover -s plugins/sc-publish/.github/scripts/tests -p 'test_publish_kit_*.py'
-      - name: Generate vendored consumer install input
+      - name: Generate complete vendored-consumer install input
         run: |
-          consumer="${RUNNER_TEMP}/publish-kit-consumer"
-          mkdir -p "$consumer"
-          "$SC_COMPOSE_PYTHON" plugins/sc-publish/install.py --example-json "${RUNNER_TEMP}/publish-kit-install.json" "$consumer"
+          "$SC_COMPOSE_PYTHON" -c '
+          import json
+          import os
+          import runpy
+          from pathlib import Path
+
+          values = runpy.run_path(".integration/manifest_examples.py")["complete_values"]()
+          # The installed unit suite is generic: use a library-only consumer
+          # so source-workspace-only release tests correctly skip.
+          values["crates"] = []
+          values["release_binaries"] = []
+          values["python_packages"] = []
+          values["python_distributions"] = []
+          Path(os.environ["RUNNER_TEMP"], "publish-kit-install.json").write_text(json.dumps(values))
+          '
       - name: Run vendored consumer test suite
         run: |
           "$SC_COMPOSE_PYTHON" -m pip install pytest==8.3.5
           consumer="${RUNNER_TEMP}/publish-kit-consumer"
+          mkdir -p "$consumer"
           "$SC_COMPOSE_PYTHON" plugins/sc-publish/install.py --input "${RUNNER_TEMP}/publish-kit-install.json" "$consumer"
           PYTHONPATH="$consumer/.github/scripts" "$SC_COMPOSE_PYTHON" -m pytest "$consumer/.github/scripts/tests/test_release_artifacts.py" -q
       - name: Run generic manifest integration examples
