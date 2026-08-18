@@ -45,6 +45,7 @@ jobs:
         run: |
           "$SC_COMPOSE_PYTHON" -m pip install pytest==8.3.5
           consumer="${RUNNER_TEMP}/publish-kit-consumer"
+          mkdir -p "$consumer"
           "$SC_COMPOSE_PYTHON" plugins/sc-publish/install.py --input "${RUNNER_TEMP}/publish-kit-install.json" "$consumer"
           PYTHONPATH="$consumer/.github/scripts" "$SC_COMPOSE_PYTHON" -m pytest "$consumer/.github/scripts/tests/test_release_artifacts.py" -q
       - name: Run generic manifest integration examples
