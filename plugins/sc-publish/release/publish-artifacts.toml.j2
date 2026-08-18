@@ -1,0 +1,23 @@
+[release]
+version_source = "{{ release.version_source }}"
+tag_prefix = "{{ release.tag_prefix }}"
+
+{% for crate in artifacts.crates %}
+[[artifacts.crates]]
+name = "{{ crate.name }}"
+publish_order = {{ crate.publish_order }}
+{% endfor %}
+
+{% for wheel in artifacts.wheels %}
+[[artifacts.wheels]]
+package = "{{ wheel.package }}"
+python_package = "{{ wheel.python_package }}"
+{% endfor %}
+
+{% for channel_name, channel in channels.items() %}
+[channels.{{ channel_name }}]
+enabled = {% if channel.enabled %}true{% else %}false{% endif %}
+{% if channel.workflow is defined %}
+workflow = "{{ channel.workflow }}"
+{% endif %}
+{% endfor %}

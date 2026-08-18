@@ -18,6 +18,7 @@ TEMPLATES = {
     Path("release/publish-channel-contracts.toml.j2"): Path(
         "release/publish-channel-contracts.toml"
     ),
+    Path("release/publish-artifacts.toml.j2"): Path("release/publish-artifacts.toml"),
 }
 
 
