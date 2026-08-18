@@ -27,7 +27,17 @@ SINGLE_CLI_JSON = r"""
 {
   "release": {"version_source": "Cargo.toml", "tag_prefix": "v"},
   "artifacts": {
-    "crates": [{"name": "example-cli", "publish_order": 1}],
+    "crates": [{
+      "artifact": "example-cli",
+      "package": "example-cli",
+      "cargo_toml": "Cargo.toml",
+      "required": true,
+      "publish": true,
+      "publish_order": 1,
+      "preflight_check": "full",
+      "wait_after_publish_seconds": 0,
+      "verify_install": false
+    }],
     "wheels": [],
     "binaries": ["example"]
   },
@@ -48,8 +58,28 @@ MULTI_ARTIFACT_JSON = r"""
   "release": {"version_source": "workspace.package.version", "tag_prefix": "release-"},
   "artifacts": {
     "crates": [
-      {"name": "example-core", "publish_order": 1},
-      {"name": "example-service", "publish_order": 2}
+      {
+        "artifact": "example-core",
+        "package": "example-core",
+        "cargo_toml": "crates/example-core/Cargo.toml",
+        "required": true,
+        "publish": true,
+        "publish_order": 1,
+        "preflight_check": "full",
+        "wait_after_publish_seconds": 0,
+        "verify_install": false
+      },
+      {
+        "artifact": "example-service",
+        "package": "example-service",
+        "cargo_toml": "crates/example-service/Cargo.toml",
+        "required": true,
+        "publish": true,
+        "publish_order": 2,
+        "preflight_check": "full",
+        "wait_after_publish_seconds": 30,
+        "verify_install": false
+      }
     ],
     "wheels": [{"package": "example-sdk", "python_package": "example_sdk"}],
     "binaries": ["example", "example-daemon"]
@@ -82,7 +112,7 @@ def verify_example(name: str, json_text: str) -> None:
     values = json.loads(json_text)
     rendered = render(ARTIFACT_TEMPLATE, values)
     assert rendered["release"] == values["release"], name
-    assert rendered.get("artifacts", {}).get("crates", []) == values["artifacts"]["crates"], name
+    assert rendered.get("crates", []) == values["artifacts"]["crates"], name
     assert rendered.get("artifacts", {}).get("wheels", []) == values["artifacts"]["wheels"], name
     assert [entry["name"] for entry in rendered.get("release_binaries", [])] == values[
         "artifacts"
