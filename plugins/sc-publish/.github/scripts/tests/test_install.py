@@ -219,16 +219,90 @@ class InstallValuesTests(unittest.TestCase):
                 self.assertIn(".github/scripts/release_artifacts.py", text, name)
                 self.assertNotIn("python3 scripts/release_artifacts.py", text, name)
             release = (consumer / ".github" / "workflows" / "release.yml").read_text(encoding="utf-8")
+            preflight = (consumer / ".github" / "workflows" / "release-preflight.yml").read_text(
+                encoding="utf-8"
+            )
             self.assertIn(".github/scripts/release_gate.sh", release)
             self.assertNotIn("run: scripts/release_gate.sh", release)
+            self.assertIn(".github/scripts/release_artifacts.py validate-publish-order", preflight)
+            self.assertNotIn("scripts/ci/validate_publish_order.sh", preflight)
+            self.assertNotIn("docs/publishing-agent.md", preflight)
+            packaged_runtime_files = (
+                list((consumer / ".github" / "workflows").glob("*.yml"))
+                + list((consumer / ".github" / "scripts").glob("*.py"))
+                + list((consumer / ".github" / "scripts").glob("*.sh"))
+            )
+            for path in packaged_runtime_files:
+                self.assertNotRegex(
+                    path.read_text(encoding="utf-8"),
+                    r"(?<![./\\w])scripts/",
+                    path.relative_to(consumer).as_posix(),
+                )
 
             helper = subprocess.run(
-                [sys.executable, str(artifacts), "verify-version", "--help"],
+                [sys.executable, str(artifacts), "validate-publish-order", "--help"],
                 text=True,
                 capture_output=True,
                 check=False,
             )
             self.assertEqual(helper.returncode, 0, helper.stderr)
+            (consumer / "Cargo.toml").write_text(
+                '[workspace]\nmembers = ["crates/base", "crates/leaf"]\n', encoding="utf-8"
+            )
+            base = consumer / "crates" / "base"
+            leaf = consumer / "crates" / "leaf"
+            base.mkdir(parents=True)
+            leaf.mkdir(parents=True)
+            (base / "Cargo.toml").write_text(
+                '[package]\nname = "base"\nversion = "1.0.0"\n', encoding="utf-8"
+            )
+            (leaf / "Cargo.toml").write_text(
+                '[package]\nname = "leaf"\nversion = "1.0.0"\n\n'
+                '[dependencies]\nbase = { path = "../base" }\n',
+                encoding="utf-8",
+            )
+            manifest = consumer / "release" / "publish-artifacts.toml"
+            manifest.write_text(
+                "\n".join(
+                    (
+                        "schema_version = 1",
+                        "",
+                        "[[crates]]",
+                        'artifact = "base"',
+                        'package = "base"',
+                        'cargo_toml = "crates/base/Cargo.toml"',
+                        "publish = true",
+                        "publish_order = 1",
+                        "wait_after_publish_seconds = 0",
+                        "",
+                        "[[crates]]",
+                        'artifact = "leaf"',
+                        'package = "leaf"',
+                        'cargo_toml = "crates/leaf/Cargo.toml"',
+                        "publish = true",
+                        "publish_order = 2",
+                        "wait_after_publish_seconds = 0",
+                        "",
+                    )
+                ),
+                encoding="utf-8",
+            )
+            order = subprocess.run(
+                [
+                    sys.executable,
+                    str(artifacts),
+                    "validate-publish-order",
+                    "--manifest",
+                    str(manifest),
+                    "--workspace-toml",
+                    str(consumer / "Cargo.toml"),
+                ],
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+            self.assertEqual(order.returncode, 0, order.stderr)
+            self.assertIn("matches the workspace dependency graph", order.stdout)
             gate_check = subprocess.run(
                 ["bash", "-n", str(gate)],
                 text=True,

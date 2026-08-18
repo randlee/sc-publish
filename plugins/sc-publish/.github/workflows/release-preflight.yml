@@ -208,14 +208,16 @@ jobs:
       - id: publish_order
         name: Validate publish_order dependency graph
         continue-on-error: true
-        run: bash scripts/ci/validate_publish_order.sh
+        run: |
+          python3 .github/scripts/release_artifacts.py validate-publish-order \
+            --manifest "${RELEASE_ARTIFACT_MANIFEST}" \
+            --workspace-toml Cargo.toml
 
       - id: helpers
         name: Verify release helper files exist
         continue-on-error: true
         run: |
           test -f .github/scripts/release_gate.sh
-          test -f docs/publishing-agent.md
 
       - id: version
         name: Verify requested version matches workspace
