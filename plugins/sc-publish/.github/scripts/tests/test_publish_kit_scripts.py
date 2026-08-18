@@ -80,6 +80,15 @@ class ReleaseScriptTests(unittest.TestCase):
         self.assertIn("public-registry-inquiry-plan", result.stdout)
         self.assertIn("preflight-secret-plan", result.stdout)
 
+    def test_bootstrap_pins_the_renderer_version(self) -> None:
+        script = SCRIPTS / "bootstrap_sc_compose.py"
+        text = script.read_text(encoding="utf-8")
+        self.assertIn('SC_COMPOSE_VERSION = "1.4.1"', text)
+        self.assertIn('"cargo"', text)
+        self.assertIn('"install"', text)
+        self.assertIn('"--locked"', text)
+        self.assertIn("renderer version mismatch", text)
+
 
 if __name__ == "__main__":
     unittest.main()

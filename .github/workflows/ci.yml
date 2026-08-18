@@ -18,3 +18,11 @@ jobs:
         run: |
           python3 -m unittest discover -s plugins/sc-publish/.github/scripts/tests -p 'test_install.py'
           python3 -m unittest discover -s plugins/sc-publish/.github/scripts/tests -p 'test_publish_kit_*.py'
+      - name: Provision the pinned renderer
+        id: renderer
+        shell: bash
+        run: |
+          renderer="$(python3 plugins/sc-publish/.github/scripts/bootstrap_sc_compose.py --root "${RUNNER_TEMP}/sc-compose")"
+          echo "SC_COMPOSE_BIN=${renderer}" >> "$GITHUB_ENV"
+      - name: Run generic manifest integration examples
+        run: python3 .integration/manifest_examples.py

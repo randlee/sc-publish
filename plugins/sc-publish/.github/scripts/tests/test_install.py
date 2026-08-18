@@ -3,8 +3,11 @@
 from __future__ import annotations
 
 import importlib.util
+import json
+import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 
 INSTALLER = Path(__file__).resolve().parents[3] / "install.py"
@@ -15,32 +18,63 @@ SPEC.loader.exec_module(INSTALL)
 
 
 class InstallValuesTests(unittest.TestCase):
-    def test_json_list_requires_a_string_array(self) -> None:
-        self.assertEqual(INSTALL.json_list('["core", "cli"]', "--crates"), ["core", "cli"])
-        with self.assertRaisesRegex(Exception, "JSON array of strings"):
-            INSTALL.json_list('{"name": "core"}', "--crates")
+    def test_example_json_enables_only_supported_channels(self) -> None:
+        with (
+            patch.object(INSTALL, "discover_crates", return_value=["example-core"]),
+            patch.object(INSTALL, "discover_wheels", return_value=[]),
+            patch.object(INSTALL, "discover_binaries", return_value=[]),
+        ):
+            values = INSTALL.example_values(Path("consumer"))
+        self.assertTrue(values["channels"]["crates_io"]["enabled"])
+        self.assertFalse(values["channels"]["pypi"]["enabled"])
+        self.assertFalse(values["channels"]["homebrew"]["enabled"])
+        self.assertFalse(values["channels"]["winget"]["enabled"])
 
-    def test_install_values_preserve_requested_artifacts(self) -> None:
-        values = INSTALL.install_values(
-            Path("/consumer"),
-            ["example-core", "example-cli"],
-            ["example-python"],
-            ["example"],
-        )
+    def test_load_install_values_requires_explicit_artifacts_and_channels(self) -> None:
+        values = {
+            "release": {"version_source": "Cargo.toml", "tag_prefix": "v"},
+            "artifacts": {
+                "crates": [
+                    {"name": "example-core", "publish_order": 1},
+                    {"name": "example-cli", "publish_order": 2},
+                ],
+                "wheels": [{"package": "example-python", "python_package": "example_python"}],
+                "binaries": ["example"],
+            },
+            "channels": {
+                "github_release": {"enabled": True},
+                "crates_io": {"enabled": True},
+                "pypi": {"enabled": False, "workflow": "pypi-publish.yml"},
+                "homebrew": {"enabled": False},
+                "scoop": {"enabled": False},
+                "winget": {"enabled": False},
+            },
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "input.json"
+            path.write_text(json.dumps(values), encoding="utf-8")
+            loaded = INSTALL.load_install_values(path)
         self.assertEqual(
-            values["artifacts"]["crates"],
+            loaded["artifacts"]["crates"],
             [
                 {"name": "example-core", "publish_order": 1},
                 {"name": "example-cli", "publish_order": 2},
             ],
         )
         self.assertEqual(
-            values["artifacts"]["wheels"],
+            loaded["artifacts"]["wheels"],
             [{"package": "example-python", "python_package": "example_python"}],
         )
-        self.assertEqual(values["artifacts"]["binaries"], ["example"])
-        self.assertTrue(values["channels"]["crates_io"]["enabled"])
-        self.assertTrue(values["channels"]["scoop"]["enabled"])
+        self.assertEqual(loaded["artifacts"]["binaries"], ["example"])
+        self.assertTrue(loaded["channels"]["crates_io"]["enabled"])
+        self.assertFalse(loaded["channels"]["scoop"]["enabled"])
+
+    def test_load_install_values_rejects_missing_channel_activation(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "input.json"
+            path.write_text("{}", encoding="utf-8")
+            with self.assertRaisesRegex(Exception, "release must be an object"):
+                INSTALL.load_install_values(path)
 
 
 if __name__ == "__main__":

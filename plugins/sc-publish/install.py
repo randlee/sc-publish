@@ -6,12 +6,14 @@ from __future__ import annotations
 import argparse
 import difflib
 import json
+import os
 import shutil
 import subprocess
 import sys
 import tempfile
 import tomllib
 from pathlib import Path
+from typing import Any
 
 
 PACKAGE_ROOT = Path(__file__).resolve().parent
@@ -22,25 +24,14 @@ TEMPLATES = {
     Path("release/publish-artifacts.toml.j2"): Path("release/publish-artifacts.toml"),
 }
 
-DEFAULT_CHANNELS = {
-    "github_release": {"enabled": True},
-    "crates_io": {"enabled": True},
-    "pypi": {"enabled": True, "workflow": "pypi-publish.yml"},
-    "homebrew": {"enabled": True},
-    "scoop": {"enabled": True},
-    "winget": {"enabled": True},
-}
-
-
-def json_list(value: str, option: str) -> list[str]:
-    """Parse a CLI JSON array of package names."""
-    try:
-        parsed = json.loads(value)
-    except json.JSONDecodeError as error:
-        raise argparse.ArgumentTypeError(f"{option} must be a JSON array: {error}") from error
-    if not isinstance(parsed, list) or not all(isinstance(item, str) for item in parsed):
-        raise argparse.ArgumentTypeError(f"{option} must be a JSON array of strings")
-    return parsed
+CHANNEL_NAMES = (
+    "github_release",
+    "crates_io",
+    "pypi",
+    "homebrew",
+    "scoop",
+    "winget",
+)
 
 
 def discover_crates(consumer: Path) -> list[str]:
@@ -62,6 +53,29 @@ def discover_crates(consumer: Path) -> list[str]:
     ]
 
 
+def discover_binaries(consumer: Path) -> list[str]:
+    """Return Cargo binary target names for an example input only."""
+    if not (consumer / "Cargo.toml").is_file():
+        return []
+    result = subprocess.run(
+        ["cargo", "metadata", "--no-deps", "--format-version", "1"],
+        cwd=consumer,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    metadata = json.loads(result.stdout)
+    return sorted(
+        {
+            target["name"]
+            for package in metadata["packages"]
+            if package.get("publish") != []
+            for target in package.get("targets", [])
+            if "bin" in target.get("kind", [])
+        }
+    )
+
+
 def discover_wheels(consumer: Path) -> list[str]:
     """Return Python project names without reading release metadata."""
     excluded = {".git", "target", ".venv", "venv"}
@@ -77,8 +91,12 @@ def discover_wheels(consumer: Path) -> list[str]:
     return wheels
 
 
-def install_values(consumer: Path, crates: list[str], wheels: list[str], binaries: list[str]) -> dict[str, object]:
-    """Build the JSON supplied to sc-compose from source discovery and CLI input."""
+def example_values(consumer: Path) -> dict[str, object]:
+    """Return a source-discovered starting point; never use it for installation."""
+    crates = discover_crates(consumer)
+    wheels = discover_wheels(consumer)
+    binaries = discover_binaries(consumer)
+    has_binaries = bool(binaries)
     return {
         "release": {"version_source": "Cargo.toml", "tag_prefix": "v"},
         "artifacts": {
@@ -92,8 +110,73 @@ def install_values(consumer: Path, crates: list[str], wheels: list[str], binarie
             ],
             "binaries": binaries,
         },
-        "channels": DEFAULT_CHANNELS,
+        "channels": {
+            "github_release": {"enabled": has_binaries},
+            "crates_io": {"enabled": bool(crates)},
+            "pypi": {"enabled": bool(wheels), "workflow": "pypi-publish.yml"},
+            "homebrew": {"enabled": has_binaries},
+            "scoop": {"enabled": has_binaries},
+            "winget": {"enabled": has_binaries},
+        },
     }
+
+
+def _require_mapping(value: object, label: str) -> dict[str, Any]:
+    if not isinstance(value, dict):
+        raise argparse.ArgumentTypeError(f"{label} must be an object")
+    return value
+
+
+def _require_string(value: object, label: str) -> str:
+    if not isinstance(value, str) or not value:
+        raise argparse.ArgumentTypeError(f"{label} must be a non-empty string")
+    return value
+
+
+def load_install_values(path: Path) -> dict[str, object]:
+    """Load the complete, caller-declared install contract without inference."""
+    try:
+        values = _require_mapping(json.loads(path.read_text(encoding="utf-8")), "install input")
+    except OSError as error:
+        raise argparse.ArgumentTypeError(f"cannot read --input {path}: {error}") from error
+    except json.JSONDecodeError as error:
+        raise argparse.ArgumentTypeError(f"--input must contain JSON: {error}") from error
+
+    release = _require_mapping(values.get("release"), "release")
+    _require_string(release.get("version_source"), "release.version_source")
+    _require_string(release.get("tag_prefix"), "release.tag_prefix")
+    artifacts = _require_mapping(values.get("artifacts"), "artifacts")
+    for key in ("crates", "wheels", "binaries"):
+        if not isinstance(artifacts.get(key), list):
+            raise argparse.ArgumentTypeError(f"artifacts.{key} must be an array")
+    for position, crate in enumerate(artifacts["crates"], start=1):
+        crate_value = _require_mapping(crate, f"artifacts.crates[{position}]")
+        _require_string(crate_value.get("name"), f"artifacts.crates[{position}].name")
+        if not isinstance(crate_value.get("publish_order"), int):
+            raise argparse.ArgumentTypeError(
+                f"artifacts.crates[{position}].publish_order must be an integer"
+            )
+    for position, wheel in enumerate(artifacts["wheels"], start=1):
+        wheel_value = _require_mapping(wheel, f"artifacts.wheels[{position}]")
+        _require_string(wheel_value.get("package"), f"artifacts.wheels[{position}].package")
+        _require_string(
+            wheel_value.get("python_package"), f"artifacts.wheels[{position}].python_package"
+        )
+    if not all(isinstance(binary, str) and binary for binary in artifacts["binaries"]):
+        raise argparse.ArgumentTypeError("artifacts.binaries must be an array of non-empty strings")
+
+    channels = _require_mapping(values.get("channels"), "channels")
+    missing_channels = [name for name in CHANNEL_NAMES if name not in channels]
+    if missing_channels:
+        raise argparse.ArgumentTypeError(
+            f"channels must explicitly declare: {', '.join(missing_channels)}"
+        )
+    for name in CHANNEL_NAMES:
+        channel = _require_mapping(channels[name], f"channels.{name}")
+        if not isinstance(channel.get("enabled"), bool):
+            raise argparse.ArgumentTypeError(f"channels.{name}.enabled must be true or false")
+    _require_string(_require_mapping(channels["pypi"], "channels.pypi").get("workflow"), "channels.pypi.workflow")
+    return values
 
 
 def package_files() -> list[Path]:
@@ -120,10 +203,15 @@ def print_diff(destination: Path, source: Path, relative: Path) -> None:
     )
 
 
+def renderer_command() -> str:
+    """Use the explicitly provisioned renderer when CI or a caller supplies one."""
+    return os.environ.get("SC_COMPOSE_BIN", "sc-compose")
+
+
 def render_template(template: Path, install_json: Path, output: Path) -> None:
     subprocess.run(
         [
-            "sc-compose",
+            renderer_command(),
             "render",
             "--root",
             str(PACKAGE_ROOT),
@@ -150,13 +238,15 @@ def main() -> int:
         default=Path.cwd(),
         help="consumer repository (default: current directory)",
     )
-    parser.add_argument("--crates", metavar="JSON", help="JSON array of crate names")
-    parser.add_argument("--wheels", metavar="JSON", help="JSON array of wheel names")
-    parser.add_argument("--binaries", metavar="JSON", help="JSON array of release binary names")
+    parser.add_argument(
+        "--input",
+        type=Path,
+        help="required JSON file declaring release artifacts, explicit order, and channel activation",
+    )
     parser.add_argument(
         "--example-json",
         action="store_true",
-        help="print source-discovered JSON for manifest generation and exit",
+        help="print a source-discovered starting JSON document and exit; never installs",
     )
     if len(sys.argv) == 1:
         parser.print_help()
@@ -166,16 +256,18 @@ def main() -> int:
     consumer = args.consumer_repository.resolve()
     if not consumer.is_dir():
         parser.error(f"consumer repository does not exist: {consumer}")
-    try:
-        crates = json_list(args.crates, "--crates") if args.crates else discover_crates(consumer)
-        wheels = json_list(args.wheels, "--wheels") if args.wheels else discover_wheels(consumer)
-        binaries = json_list(args.binaries, "--binaries") if args.binaries else []
-    except (argparse.ArgumentTypeError, subprocess.CalledProcessError, tomllib.TOMLDecodeError) as error:
-        parser.error(str(error))
-    values = install_values(consumer, crates, wheels, binaries)
     if args.example_json:
-        print(json.dumps(values, indent=2))
+        try:
+            print(json.dumps(example_values(consumer), indent=2))
+        except (subprocess.CalledProcessError, tomllib.TOMLDecodeError) as error:
+            parser.error(str(error))
         return 0
+    if args.input is None:
+        parser.error("--input is required for installation; use --example-json only to draft it")
+    try:
+        values = load_install_values(args.input)
+    except argparse.ArgumentTypeError as error:
+        parser.error(str(error))
 
     with tempfile.TemporaryDirectory() as temporary_directory:
         install_json = Path(temporary_directory) / "install.json"
