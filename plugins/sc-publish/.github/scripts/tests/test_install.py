@@ -177,6 +177,66 @@ class InstallValuesTests(unittest.TestCase):
             with self.assertRaisesRegex(Exception, "release must be an object"):
                 INSTALL.load_install_values(path)
 
+    def test_install_places_executable_release_helpers_at_every_workflow_path(self) -> None:
+        """The byte-exact overlay keeps helpers under .github/scripts/.
+
+        This exercises a real install into a temporary consumer. It prevents a
+        parity-only check from accepting workflows that still call an obsolete
+        consumer-local scripts/ path.
+        """
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            consumer = root / "consumer"
+            consumer.mkdir()
+            input_path = root / "install.json"
+            input_path.write_text(json.dumps(self.valid_values()), encoding="utf-8")
+
+            def render_empty_toml(_template: Path, _values: dict[str, object], output: Path) -> None:
+                output.write_text("schema_version = 1\n", encoding="utf-8")
+
+            with (
+                patch.object(INSTALL, "render_template", side_effect=render_empty_toml),
+                patch.object(sys, "argv", [str(INSTALLER), "--input", str(input_path), str(consumer)]),
+            ):
+                self.assertEqual(INSTALL.main(), 0)
+
+            artifacts = consumer / ".github" / "scripts" / "release_artifacts.py"
+            gate = consumer / ".github" / "scripts" / "release_gate.sh"
+            self.assertTrue(artifacts.is_file())
+            self.assertTrue(gate.is_file())
+
+            workflows = (
+                "release.yml",
+                "release-preflight.yml",
+                "pypi-publish.yml",
+                "homebrew-publish.yml",
+                "scoop-publish.yml",
+                "winget-publish.yml",
+            )
+            for name in workflows:
+                text = (consumer / ".github" / "workflows" / name).read_text(encoding="utf-8")
+                self.assertIn(".github/scripts/release_artifacts.py", text, name)
+                self.assertNotIn("python3 scripts/release_artifacts.py", text, name)
+            release = (consumer / ".github" / "workflows" / "release.yml").read_text(encoding="utf-8")
+            self.assertIn(".github/scripts/release_gate.sh", release)
+            self.assertNotIn("run: scripts/release_gate.sh", release)
+
+            helper = subprocess.run(
+                [sys.executable, str(artifacts), "verify-version", "--help"],
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+            self.assertEqual(helper.returncode, 0, helper.stderr)
+            gate_check = subprocess.run(
+                ["bash", "-n", str(gate)],
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+            self.assertEqual(gate_check.returncode, 0, gate_check.stderr)
+
 
 if __name__ == "__main__":
     unittest.main()
