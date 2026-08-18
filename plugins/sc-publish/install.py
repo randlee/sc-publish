@@ -151,13 +151,20 @@ def load_install_values(path: Path) -> dict[str, object]:
     for key in ("crates", "wheels", "binaries"):
         if not isinstance(artifacts.get(key), list):
             raise argparse.ArgumentTypeError(f"artifacts.{key} must be an array")
+    publish_orders: set[int] = set()
     for position, crate in enumerate(artifacts["crates"], start=1):
         crate_value = _require_mapping(crate, f"artifacts.crates[{position}]")
         _require_string(crate_value.get("name"), f"artifacts.crates[{position}].name")
-        if not isinstance(crate_value.get("publish_order"), int):
+        publish_order = crate_value.get("publish_order")
+        if type(publish_order) is not int or publish_order <= 0:
             raise argparse.ArgumentTypeError(
-                f"artifacts.crates[{position}].publish_order must be an integer"
+                f"artifacts.crates[{position}].publish_order must be a positive integer"
             )
+        if publish_order in publish_orders:
+            raise argparse.ArgumentTypeError(
+                f"artifacts.crates[{position}].publish_order must be unique"
+            )
+        publish_orders.add(publish_order)
     for position, wheel in enumerate(artifacts["wheels"], start=1):
         wheel_value = _require_mapping(wheel, f"artifacts.wheels[{position}]")
         _require_string(wheel_value.get("package"), f"artifacts.wheels[{position}].package")
@@ -231,7 +238,7 @@ def main() -> int:
         description=__doc__,
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""workflow:
-  1. Generate a reviewable input: --write-example install.json REPOSITORY
+  1. Generate a reviewable input: --example-json install.json REPOSITORY
   2. Confirm artifact names, publish order, and enabled channels in install.json.
   3. Install: --input install.json REPOSITORY
   4. Verify a repeat install without changing files: --dry-run --input install.json REPOSITORY
@@ -262,14 +269,11 @@ dry-run returns 1 when consumer files would change.""",
     )
     input_mode.add_argument(
         "--example-json",
-        action="store_true",
-        help="print a source-discovered starting JSON document and exit; never installs",
-    )
-    input_mode.add_argument(
-        "--write-example",
+        nargs="?",
         type=Path,
         metavar="INSTALL.json",
-        help="write a source-discovered starting JSON document and exit; never installs",
+        const=Path("-"),
+        help="print or write a source-discovered starting JSON document and exit; never installs",
     )
     if len(sys.argv) == 1:
         parser.print_help()
@@ -279,20 +283,18 @@ dry-run returns 1 when consumer files would change.""",
     consumer = args.consumer_repository.resolve()
     if not consumer.is_dir():
         parser.error(f"consumer repository does not exist: {consumer}")
-    if args.example_json:
+    if args.example_json is not None:
         try:
-            print(json.dumps(example_values(consumer), indent=2))
-        except (subprocess.CalledProcessError, tomllib.TOMLDecodeError) as error:
-            parser.error(str(error))
-        return 0
-    if args.write_example is not None:
-        try:
-            args.write_example.write_text(
-                f"{json.dumps(example_values(consumer), indent=2)}\n", encoding="utf-8"
-            )
+            example = f"{json.dumps(example_values(consumer), indent=2)}\n"
+            if args.example_json == Path("-"):
+                print(example, end="")
+            else:
+                if args.example_json.exists():
+                    parser.error(f"refusing to overwrite existing example input: {args.example_json}")
+                args.example_json.write_text(example, encoding="utf-8")
+                print(f"wrote reviewable install input: {args.example_json}")
         except (OSError, subprocess.CalledProcessError, tomllib.TOMLDecodeError) as error:
             parser.error(str(error))
-        print(f"wrote reviewable install input: {args.write_example}")
         return 0
     if args.input is None:
         parser.error("--input is required for installation; use --example-json only to draft it")
