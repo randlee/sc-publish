@@ -713,7 +713,7 @@ def cmd_verify_version_lockstep(args: argparse.Namespace) -> int:
         _assert_workspace_inherited_version(
             workspace_toml,
             cargo_toml,
-            allow_literal_base=not crate["publish"],
+            allow_literal_base=not crate.get("publish", True),
         )
         checked_cargo_manifests.add(cargo_toml)
     for distribution in _python_distribution_entries(manifest):
