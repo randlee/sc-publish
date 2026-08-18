@@ -14,7 +14,16 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
+      - name: Provision the pinned sc-compose wheel
+        id: sc_compose
+        shell: bash
+        run: |
+          python="$(python3 plugins/sc-publish/.github/scripts/bootstrap_sc_compose.py --venv "${RUNNER_TEMP}/sc-compose-1.4.1")"
+          echo "SC_COMPOSE_PYTHON=${python}" >> "$GITHUB_ENV"
       - name: Run publish-kit unit tests
         run: |
-          python3 -m unittest discover -s plugins/sc-publish/.github/scripts/tests -p 'test_install.py'
-          python3 -m unittest discover -s plugins/sc-publish/.github/scripts/tests -p 'test_publish_kit_*.py'
+          "$SC_COMPOSE_PYTHON" -m unittest discover -s plugins/sc-publish/.github/scripts/tests -p 'test_install.py'
+          "$SC_COMPOSE_PYTHON" -m unittest discover -s plugins/sc-publish/.github/scripts/tests -p 'test_publish_kit_*.py'
+      - name: Run generic manifest integration examples
+        run: |
+          "$SC_COMPOSE_PYTHON" .integration/manifest_examples.py

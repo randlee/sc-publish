@@ -1,13 +1,7 @@
 #!/usr/bin/env python3
-"""Render representative publish-artifact manifests outside the CI suite.
+"""Render generic publish-artifact examples outside the CI unit-test suite.
 
-Run manually from the repository root:
-
-    python3 .integration/manifest_examples.py
-
-The fixtures intentionally contain JSON text rather than reading either
-consumer's manifest.  They are durable examples of the installation input
-contract for the two current consumers.
+Run through the pinned sc-compose wheel provisioned by ``bootstrap_sc_compose.py``.
 """
 
 from __future__ import annotations
@@ -19,27 +13,46 @@ import tempfile
 import tomllib
 from pathlib import Path
 
+import sc_compose
+
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 PACKAGE_ROOT = REPOSITORY_ROOT / "plugins" / "sc-publish"
 ARTIFACT_TEMPLATE = PACKAGE_ROOT / "release" / "publish-artifacts.toml.j2"
+CHANNEL_TEMPLATE = PACKAGE_ROOT / "release" / "publish-channel-contracts.toml.j2"
 INSTALLER = PACKAGE_ROOT / "install.py"
 
 
-SC_COMPOSE_JSON = r"""
+SINGLE_CLI_JSON = r"""
 {
   "release": {"version_source": "Cargo.toml", "tag_prefix": "v"},
   "artifacts": {
+    "crates": [{"name": "example-cli", "publish_order": 1}],
+    "wheels": [],
+    "binaries": ["example"]
+  },
+  "channels": {
+    "github_release": {"enabled": true},
+    "crates_io": {"enabled": true},
+    "pypi": {"enabled": false, "workflow": "pypi-publish.yml"},
+    "homebrew": {"enabled": false},
+    "scoop": {"enabled": false},
+    "winget": {"enabled": false}
+  }
+}
+"""
+
+
+MULTI_ARTIFACT_JSON = r"""
+{
+  "release": {"version_source": "workspace.package.version", "tag_prefix": "release-"},
+  "artifacts": {
     "crates": [
-      {"name": "sc-sha", "publish_order": 1},
-      {"name": "sc-composer", "publish_order": 2},
-      {"name": "sc-compose", "publish_order": 3}
+      {"name": "example-core", "publish_order": 1},
+      {"name": "example-service", "publish_order": 2}
     ],
-    "wheels": [
-      {"package": "sc-sha", "python_package": "sc_sha"},
-      {"package": "sc-compose", "python_package": "sc_compose"}
-    ],
-    "binaries": ["sc-compose"]
+    "wheels": [{"package": "example-sdk", "python_package": "example_sdk"}],
+    "binaries": ["example", "example-daemon"]
   },
   "channels": {
     "github_release": {"enabled": true},
@@ -53,105 +66,64 @@ SC_COMPOSE_JSON = r"""
 """
 
 
-ATM_CORE_JSON = r"""
-{
-  "release": {"version_source": "Cargo.toml", "tag_prefix": "v"},
-  "artifacts": {
-    "crates": [
-      {"name": "atm-error", "publish_order": 1},
-      {"name": "atm-storage", "publish_order": 2},
-      {"name": "agent-team-mail-core", "publish_order": 3},
-      {"name": "atm-storage-rusqlite", "publish_order": 4},
-      {"name": "atm-http-runtime", "publish_order": 5},
-      {"name": "atm-daemon-client", "publish_order": 6},
-      {"name": "atm-runtime", "publish_order": 7},
-      {"name": "atm-template-sc-compose", "publish_order": 8},
-      {"name": "atm-daemon-bootstrap", "publish_order": 9},
-      {"name": "atm-daemon", "publish_order": 10},
-      {"name": "atm-graft", "publish_order": 11},
-      {"name": "agent-team-mail", "publish_order": 12}
-    ],
-    "wheels": [
-      {"package": "atm-graft", "python_package": "atm_graft"},
-      {"package": "atm-query", "python_package": "atm_query"},
-      {"package": "hermes-atm", "python_package": "hermes_atm"}
-    ],
-    "binaries": ["atm", "atm-daemon"]
-  },
-  "channels": {
-    "github_release": {"enabled": true},
-    "crates_io": {"enabled": true},
-    "pypi": {"enabled": true, "workflow": "pypi-publish.yml"},
-    "homebrew": {"enabled": true},
-    "scoop": {"enabled": true},
-    "winget": {"enabled": true}
-  }
-}
-"""
-
-
-def render(values: dict[str, object]) -> dict[str, object]:
-    """Render the artifact template and return its semantic TOML value."""
-    with tempfile.TemporaryDirectory() as directory:
-        temporary = Path(directory)
-        input_path = temporary / "manifest-input.json"
-        output_path = temporary / "publish-artifacts.toml"
-        input_path.write_text(json.dumps(values), encoding="utf-8")
-        subprocess.run(
-            [
-                "sc-compose",
-                "render",
-                "--root",
-                str(PACKAGE_ROOT),
-                "--file",
-                str(ARTIFACT_TEMPLATE),
-                "--var-file",
-                str(input_path),
-                "--strict",
-                "--check-render",
-                "--output",
-                str(output_path),
-            ],
-            check=True,
-        )
-        with output_path.open("rb") as output:
-            return tomllib.load(output)
+def render(template: Path, values: dict[str, object]) -> dict[str, object]:
+    """Render one release template and return its semantic TOML value."""
+    request = sc_compose.ComposeRequest(
+        root=PACKAGE_ROOT,
+        mode=sc_compose.ComposeMode.file(str(template.relative_to(PACKAGE_ROOT))),
+        vars_input=values,
+        policy=sc_compose.ComposePolicy(strict_undeclared_variables=True),
+    )
+    return tomllib.loads(sc_compose.compose_file(request).rendered_text)
 
 
 def verify_example(name: str, json_text: str) -> None:
-    """Assert that a fixed JSON example renders without semantic drift."""
+    """Assert that fixed, generic input renders without semantic drift."""
     values = json.loads(json_text)
-    rendered = render(values)
+    rendered = render(ARTIFACT_TEMPLATE, values)
     assert rendered["release"] == values["release"], name
-    assert rendered["artifacts"]["crates"] == values["artifacts"]["crates"], name
-    assert rendered["artifacts"]["wheels"] == values["artifacts"]["wheels"], name
-    assert [entry["name"] for entry in rendered["release_binaries"]] == values[
+    assert rendered.get("artifacts", {}).get("crates", []) == values["artifacts"]["crates"], name
+    assert rendered.get("artifacts", {}).get("wheels", []) == values["artifacts"]["wheels"], name
+    assert [entry["name"] for entry in rendered.get("release_binaries", [])] == values[
         "artifacts"
     ]["binaries"], name
     for channel_name, channel in values["channels"].items():
         assert rendered["channels"][channel_name] == channel, name
+    rendered_contracts = render(CHANNEL_TEMPLATE, values)
+    with CHANNEL_TEMPLATE.open("rb") as source:
+        assert rendered_contracts == tomllib.load(source), name
 
 
 def verify_installer_is_idempotent(name: str, json_text: str) -> None:
-    """Install an example into an empty consumer and require a clean rerun."""
-    values = json.loads(json_text)
-    artifacts = values["artifacts"]
-    arguments = [
-        sys.executable,
-        str(INSTALLER),
-        "--crates",
-        json.dumps([crate["name"] for crate in artifacts["crates"]]),
-        "--wheels",
-        json.dumps([wheel["package"] for wheel in artifacts["wheels"]]),
-        "--binaries",
-        json.dumps(artifacts["binaries"]),
-    ]
+    """Require explicit input, install it, then require a clean dry-run rerun."""
     with tempfile.TemporaryDirectory() as directory:
-        consumer = Path(directory) / name
+        temporary = Path(directory)
+        consumer = temporary / name
         consumer.mkdir()
-        subprocess.run([*arguments, str(consumer)], check=True)
+        input_path = temporary / "install.json"
+        input_path.write_text(json_text, encoding="utf-8")
+        arguments = [
+            sys.executable,
+            str(INSTALLER),
+            "--input",
+            str(input_path),
+            str(consumer),
+        ]
+        subprocess.run(arguments, check=True)
+        for source in INSTALLER.parent.rglob("*"):
+            if not source.is_file() or "__pycache__" in source.parts:
+                continue
+            installed = consumer / source.relative_to(INSTALLER.parent)
+            assert installed.read_bytes() == source.read_bytes(), installed
+        with (consumer / "release" / "publish-artifacts.toml").open("rb") as output:
+            rendered_artifacts = tomllib.load(output)
+        assert rendered_artifacts["release"] == json.loads(json_text)["release"], name
+        with (consumer / "release" / "publish-channel-contracts.toml").open("rb") as output:
+            installed_contracts = tomllib.load(output)
+        with CHANNEL_TEMPLATE.open("rb") as source:
+            assert installed_contracts == tomllib.load(source), name
         clean_rerun = subprocess.run(
-            [*arguments, "--dry-run", str(consumer)],
+            [*arguments, "--dry-run"],
             text=True,
             capture_output=True,
             check=False,
@@ -160,11 +132,11 @@ def verify_installer_is_idempotent(name: str, json_text: str) -> None:
 
 
 def main() -> None:
-    verify_example("sc-compose", SC_COMPOSE_JSON)
-    verify_example("atm-core", ATM_CORE_JSON)
-    verify_installer_is_idempotent("sc-compose", SC_COMPOSE_JSON)
-    verify_installer_is_idempotent("atm-core", ATM_CORE_JSON)
-    print("manifest examples passed: sc-compose, atm-core; installer reruns are clean")
+    verify_example("single-cli", SINGLE_CLI_JSON)
+    verify_example("multi-artifact", MULTI_ARTIFACT_JSON)
+    verify_installer_is_idempotent("single-cli", SINGLE_CLI_JSON)
+    verify_installer_is_idempotent("multi-artifact", MULTI_ARTIFACT_JSON)
+    print("generic manifest examples passed; installer reruns are clean")
 
 
 if __name__ == "__main__":
