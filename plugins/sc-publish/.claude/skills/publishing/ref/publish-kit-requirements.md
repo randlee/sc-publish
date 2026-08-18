@@ -21,6 +21,13 @@
   publish channel (crates.io, GitHub Release, Homebrew, `winget`, Scoop, PyPI)
   running in parallel inside its session,
   not sequentially.
+- **Cursor runtime:** the same channel contracts apply, but the publisher
+  executes every channel inline in one foreground session — see
+  `.claude/skills/publishing/ref/cursor-runtime.md`. Channel agent files remain
+  authoritative playbooks; they are not spawned as Task subagents.
+- **Cursor runtime:** the same channel contracts apply, but the publisher
+  executes channel steps **inline** in one foreground session — no nested Task
+  subagents. See [`ref/cursor-runtime.md`](cursor-runtime.md).
 - Each background channel worker consolidates and owns exactly what its specific
   target needs (its own manifest-declared inputs, its own publish steps,
   its own verification), rather than one monolithic publish step handling

@@ -38,8 +38,11 @@ using that contract. Copy both files unchanged when vendoring the publish kit.
 - A public lookup is evidence of registry state, not a reservation. Treat a
   timeout, rate limit, unexpected response, or 5xx as `indeterminate`.
 - `publisher` may delegate a read-only inquiry to a role-specific background
-  worker without a release assignment. Publishing, workflow dispatch, or retry
-  still requires the `publisher` assignment and successful preflight evidence.
+  worker without a release assignment (**ATM/rmux only**). In **Cursor**, run
+  the same inquiry inline via `public-registry-inquiry-plan` and public
+  `curl` checks per [`ref/cursor-runtime.md`](ref/cursor-runtime.md).
+  Publishing, workflow dispatch, or retry still requires release assignment
+  and successful preflight evidence.
 
 ## crates.io and PyPI inquiry — `crates-io-publisher`, `pypi-publisher`
 

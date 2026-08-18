@@ -8,6 +8,10 @@ metadata:
 
 # crates.io Publisher
 
+> **Runtime:** ATM background worker (`spawn_policy: background_agent_required`).
+> **Cursor:** do not spawn this agent — publisher runs this contract inline
+> (`.claude/skills/publishing/ref/cursor-runtime.md`).
+
 Read `publisher-channel-protocol.md`, then the `crates_io` contract and
 `.claude/skills/publishing/ref/channel-contracts.md`. You own only crates.io.
 Support read-only candidate-name inquiries using

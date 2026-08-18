@@ -23,8 +23,11 @@ help. `--example-json` prints a source-discovered starter document to stdout,
 or writes it when given an output path. It refuses to overwrite an existing
 contract, preserving reviewed publish-order and channel edits.
 
-The installer copies the shared `.claude`, `.github`, and release assets, then
-uses the pinned `sc-compose` Python bindings to write consumer-specific release manifests.
+The installer copies the shared `.claude`, `.cursor`, `.github`, and release
+assets, then uses the pinned `sc-compose` Python bindings to write
+consumer-specific release manifests. Cursor users get inline publisher entry
+points (`.cursor/agents/publisher.md`, `/cursor-publish`) alongside the ATM
+background-worker profile in `.claude`.
 The non-CI examples in [`.integration/manifest_examples.py`](.integration/manifest_examples.py)
 render generic inputs and compare parsed TOML values. CI provisions the pinned
 `sc-compose` wheel before running them.

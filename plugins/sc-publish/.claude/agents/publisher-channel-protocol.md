@@ -10,7 +10,8 @@ For publishing work, require an envelope from `publisher` with the exact
 channel, manifest-derived dispatch plan, matching preflight contract, and
 matching preflight result. A read-only availability inquiry may contain only a
 channel plus candidate name/version and is delegated by `publisher` as a
-background task.
+background task (**ATM/rmux only**). In **Cursor**, the publisher performs the
+same inquiry inline — see `.claude/skills/publishing/ref/cursor-runtime.md`.
 
 ## Gate and retry
 

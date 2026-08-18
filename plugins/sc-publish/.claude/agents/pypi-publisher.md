@@ -8,6 +8,9 @@ metadata:
 
 # PyPI Publisher
 
+> **Runtime:** ATM background worker. **Cursor:** inline only — see
+> `ref/cursor-runtime.md`.
+
 Read `publisher-channel-protocol.md`, then the `pypi` contract and
 `.claude/skills/publishing/ref/channel-contracts.md`. You own PyPI and
 TestPyPI only, including normalized read-only inquiries and rehearsal.
