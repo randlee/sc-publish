@@ -5,8 +5,7 @@ Run **sc-publish** release preflight or publish in this Cursor session.
 ## Mandatory
 
 1. Read `.cursor/skills/cursor-publish/SKILL.md`.
-2. Read `.cursor/agents/publisher.md` (Cursor profile) and
-   `.claude/skills/publishing/ref/cursor-runtime.md`.
+2. Read `.cursor/agents/publisher.md` (Cursor profile).
 3. Read `.claude/agents/publisher.md` for shared tag/manifest/retry policy.
 4. **Inline only** — do not spawn Task subagents for channel workers.
 5. Do not run publisher as a **background** subagent under Multitask Mode.

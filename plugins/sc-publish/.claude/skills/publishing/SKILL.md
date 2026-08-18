@@ -1,6 +1,6 @@
 ---
 name: publishing
-description: Coordinate a manifest-driven software release through a named ATM publisher teammate or Cursor inline publisher. Use when preparing release preflight, publishing a release, retrying a failed publish channel, or diagnosing release workflow readiness in the current repository.
+description: Coordinate a manifest-driven software release through a named ATM publisher teammate. Use when preparing release preflight, publishing a release, retrying a failed publish channel, or diagnosing release workflow readiness in the current repository.
 ---
 
 # Publishing
@@ -12,8 +12,6 @@ publisher identities. The shared release-state policy is
 before selecting a branch, preflight location, or publish action.
 
 ## Start the publisher
-
-### ATM / rmux (production default)
 
 1. Verify the required tools before delegation:
 
@@ -39,29 +37,16 @@ before selecting a branch, preflight location, or publish action.
    immediate ACK, milestone status, and fenced JSON completion report from
    `publisher`.
 
-### Cursor
-
-1. Read `.claude/skills/publishing/ref/cursor-runtime.md`.
-2. Run `/cursor-publish` or invoke `.cursor/agents/publisher.md` in a **single
-   foreground session**.
-3. Do **not** spawn background channel workers or nested `publisher` Tasks.
-4. Use the same manifest helpers and workflows; channel agents are inline
-   playbooks only.
-
 ## Channel publishers
 
 The named `publisher` teammate coordinates role-specific background channel
-workers inside its own session (**ATM/rmux only**). In **Cursor**, the
-publisher agent executes the same channel contracts **inline** — see
-[`ref/cursor-runtime.md`](ref/cursor-runtime.md).
-`release/publish-channel-contracts.toml` defines their standard role and
-contract; [`ref/channel-contracts.md`](ref/channel-contracts.md) defines its
-operating procedure. Do not launch channel workers as ATM teammates or tmux
+workers inside its own session. `release/publish-channel-contracts.toml`
+defines their standard role and contract; [`ref/channel-contracts.md`](ref/channel-contracts.md)
+defines its operating procedure. Do not launch them as ATM teammates or tmux
 panes, and do not duplicate secret names, registry APIs, or account conventions
-in a repository manifest. **Cursor:** read channel agents inline per
-[`ref/cursor-runtime.md`](ref/cursor-runtime.md) — never as Task subagents.
+in a repository manifest.
 
-Before delegation (ATM) or inline execution (Cursor), read the concise
+Before delegation, `publisher` and each channel worker must read the concise
 credential facts in [`ref/channel-contracts.md`](ref/channel-contracts.md).
 Credentials are already configured; do not ask for them. `Release Preflight`
 is authoritative.

@@ -14,9 +14,7 @@ Use when releasing a consumer repository that vendored the sc-publish kit via
 
 | ATM/rmux | Cursor (this skill) |
 |----------|---------------------|
-| Named teammate + background channel workers | **One foreground publisher**; channel agents are **read-only playbooks** |
-
-See `.claude/skills/publishing/ref/cursor-runtime.md`.
+| Named teammate + background channel workers | **One foreground publisher**; channel-agent files are **inline playbooks** |
 
 ## Prerequisites
 
@@ -32,7 +30,8 @@ After install, the consumer should have:
 
 1. `/cursor-publish` (`.cursor/commands/cursor-publish.md`)
 2. Single **foreground** session following `.cursor/agents/publisher.md`
-3. Do **not** use Multitask background delegation for publisher
+3. Run each channel-agent playbook inline and sequentially; do **not** use
+   Multitask background delegation or Task subagents.
 
 ## Tool recipes
 

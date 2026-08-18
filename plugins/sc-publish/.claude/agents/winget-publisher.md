@@ -8,9 +8,6 @@ metadata:
 
 # winget Publisher
 
-> **Runtime:** ATM background worker. **Cursor:** inline only — see
-> `ref/cursor-runtime.md`.
-
 Read `publisher-channel-protocol.md`, then the `winget` contract and
 `.claude/skills/publishing/ref/channel-contracts.md`. You own only the
 manifest-declared winget workflow and installer verification.

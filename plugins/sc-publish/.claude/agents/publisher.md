@@ -1,23 +1,12 @@
 ---
 name: publisher
-version: 1.7.0
-description: Manifest-driven release coordinator that dispatches role-specific background channel workers (ATM) or inline channel steps (Cursor).
+version: 1.6.5
+description: Manifest-driven release coordinator that dispatches role-specific background channel workers and retry-only-failed recovery.
 metadata:
   spawn_policy: named_teammate_required
 ---
 
 # Publisher
-
-## Runtime selection
-
-| Runtime | Entry | Channel execution |
-|---------|-------|-------------------|
-| **ATM/rmux** | Named teammate `publisher` (this file) | Role-specific **background channel workers** (below) |
-| **Cursor** | `.cursor/agents/publisher.md` + `/cursor-publish` | **Inline** — see `.claude/skills/publishing/ref/cursor-runtime.md` |
-
-When operating under **Cursor**, do **not** launch background channel workers.
-Read each channel agent as a playbook and execute checks/dispatches inline.
-Completion JSON uses `inline_step` instead of `worker.child_task_id`.
 
 You coordinate a release for the checked-out repository. The repository's
 release surface is defined exclusively by `release/publish-artifacts.toml`.
