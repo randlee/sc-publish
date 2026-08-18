@@ -1,19 +1,19 @@
 #!/usr/bin/env python3
 """Render generic publish-artifact examples outside the CI unit-test suite.
 
-Run manually from the repository root.  CI provisions a pinned renderer with
-``bootstrap_sc_compose.py`` and supplies it through ``SC_COMPOSE_BIN``.
+Run through the pinned sc-compose wheel provisioned by ``bootstrap_sc_compose.py``.
 """
 
 from __future__ import annotations
 
 import json
-import os
 import subprocess
 import sys
 import tempfile
 import tomllib
 from pathlib import Path
+
+import sc_compose
 
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
@@ -66,37 +66,15 @@ MULTI_ARTIFACT_JSON = r"""
 """
 
 
-def renderer() -> str:
-    """Return the pinned renderer supplied by bootstrap or local development."""
-    return os.environ.get("SC_COMPOSE_BIN", "sc-compose")
-
-
 def render(template: Path, values: dict[str, object]) -> dict[str, object]:
     """Render one release template and return its semantic TOML value."""
-    with tempfile.TemporaryDirectory() as directory:
-        temporary = Path(directory)
-        input_path = temporary / "manifest-input.json"
-        output_path = temporary / template.with_suffix("").name
-        input_path.write_text(json.dumps(values), encoding="utf-8")
-        subprocess.run(
-            [
-                renderer(),
-                "render",
-                "--root",
-                str(PACKAGE_ROOT),
-                "--file",
-                str(template),
-                "--var-file",
-                str(input_path),
-                "--strict",
-                "--check-render",
-                "--output",
-                str(output_path),
-            ],
-            check=True,
-        )
-        with output_path.open("rb") as output:
-            return tomllib.load(output)
+    request = sc_compose.ComposeRequest(
+        root=PACKAGE_ROOT,
+        mode=sc_compose.ComposeMode.file(str(template.relative_to(PACKAGE_ROOT))),
+        vars_input=values,
+        policy=sc_compose.ComposePolicy(strict_undeclared_variables=True),
+    )
+    return tomllib.loads(sc_compose.compose_file(request).rendered_text)
 
 
 def verify_example(name: str, json_text: str) -> None:
@@ -131,8 +109,7 @@ def verify_installer_is_idempotent(name: str, json_text: str) -> None:
             str(input_path),
             str(consumer),
         ]
-        environment = {**os.environ, "SC_COMPOSE_BIN": renderer()}
-        subprocess.run(arguments, env=environment, check=True)
+        subprocess.run(arguments, check=True)
         for source in INSTALLER.parent.rglob("*"):
             if not source.is_file() or "__pycache__" in source.parts:
                 continue
@@ -147,7 +124,6 @@ def verify_installer_is_idempotent(name: str, json_text: str) -> None:
             assert installed_contracts == tomllib.load(source), name
         clean_rerun = subprocess.run(
             [*arguments, "--dry-run"],
-            env=environment,
             text=True,
             capture_output=True,
             check=False,

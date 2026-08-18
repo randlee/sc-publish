@@ -6,14 +6,18 @@ from __future__ import annotations
 import argparse
 import difflib
 import json
-import os
 import shutil
 import subprocess
 import sys
 import tempfile
 import tomllib
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+import sc_compose
+
+if TYPE_CHECKING:
+    from sc_compose import ComposeRequest
 
 
 PACKAGE_ROOT = Path(__file__).resolve().parent
@@ -203,29 +207,18 @@ def print_diff(destination: Path, source: Path, relative: Path) -> None:
     )
 
 
-def renderer_command() -> str:
-    """Use the explicitly provisioned renderer when CI or a caller supplies one."""
-    return os.environ.get("SC_COMPOSE_BIN", "sc-compose")
-
-
-def render_template(template: Path, install_json: Path, output: Path) -> None:
-    subprocess.run(
-        [
-            renderer_command(),
-            "render",
-            "--root",
-            str(PACKAGE_ROOT),
-            "--file",
-            str(template),
-            "--var-file",
-            str(install_json),
-            "--strict",
-            "--check-render",
-            "--output",
-            str(output),
-        ],
-        check=True,
+def render_template(template: Path, values: dict[str, object], output: Path) -> None:
+    """Render a package template through the pinned Python binding contract."""
+    template_path = template if template.is_absolute() else PACKAGE_ROOT / template
+    request: ComposeRequest = sc_compose.ComposeRequest(
+        root=PACKAGE_ROOT,
+        mode=sc_compose.ComposeMode.file(str(template_path.relative_to(PACKAGE_ROOT))),
+        vars_input=values,
+        policy=sc_compose.ComposePolicy(strict_undeclared_variables=True),
     )
+    rendered = sc_compose.compose_file(request).rendered_text
+    tomllib.loads(rendered)
+    output.write_text(rendered, encoding="utf-8")
 
 
 def main() -> int:
@@ -270,14 +263,12 @@ def main() -> int:
         parser.error(str(error))
 
     with tempfile.TemporaryDirectory() as temporary_directory:
-        install_json = Path(temporary_directory) / "install.json"
-        install_json.write_text(json.dumps(values), encoding="utf-8")
         rendered_templates = {
             template: Path(temporary_directory) / output.name
             for template, output in TEMPLATES.items()
         }
         for template, rendered in rendered_templates.items():
-            render_template(template, install_json, rendered)
+            render_template(template, values, rendered)
 
         changed = False
         for source in package_files():
