@@ -192,10 +192,20 @@ def load_install_values(path: Path) -> dict[str, object]:
                 " non-negative integer"
             )
         publish_order = crate_value.get("publish_order")
-        if type(publish_order) is not int or publish_order <= 0:
+        if type(publish_order) is not int or publish_order < 0:
             raise argparse.ArgumentTypeError(
-                f"artifacts.crates[{position}].publish_order must be a positive integer"
+                f"artifacts.crates[{position}].publish_order must be a non-negative integer"
             )
+        if crate_value["publish"] and publish_order == 0:
+            raise argparse.ArgumentTypeError(
+                f"artifacts.crates[{position}].publish_order must be positive when publish is true"
+            )
+        if not crate_value["publish"] and publish_order != 0:
+            raise argparse.ArgumentTypeError(
+                f"artifacts.crates[{position}].publish_order must be zero when publish is false"
+            )
+        if not crate_value["publish"]:
+            continue
         if publish_order in publish_orders:
             raise argparse.ArgumentTypeError(
                 f"artifacts.crates[{position}].publish_order must be unique"
