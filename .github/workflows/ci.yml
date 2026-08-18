@@ -25,4 +25,5 @@ jobs:
           "$SC_COMPOSE_PYTHON" -m unittest discover -s plugins/sc-publish/.github/scripts/tests -p 'test_install.py'
           "$SC_COMPOSE_PYTHON" -m unittest discover -s plugins/sc-publish/.github/scripts/tests -p 'test_publish_kit_*.py'
       - name: Run generic manifest integration examples
-        run: "$SC_COMPOSE_PYTHON" .integration/manifest_examples.py
+        run: |
+          "$SC_COMPOSE_PYTHON" .integration/manifest_examples.py

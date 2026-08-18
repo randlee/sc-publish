@@ -22,7 +22,11 @@ def python_path(venv: Path) -> Path:
 def installed_version(python: Path) -> str | None:
     """Return the wheel version already installed in the managed environment."""
     result = subprocess.run(
-        [str(python), "-c", "from importlib.metadata import version; print(version('sc-compose'))"],
+        [
+            str(python),
+            "-c",
+            "import sc_compose; from importlib.metadata import version; print(version('sc-compose'))",
+        ],
         check=False,
         capture_output=True,
         text=True,
