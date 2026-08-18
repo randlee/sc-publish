@@ -110,12 +110,9 @@ def example_values(consumer: Path) -> dict[str, object]:
                     "artifact": crate["name"],
                     "package": crate["name"],
                     "cargo_toml": crate["cargo_toml"],
-                    "required": True,
                     "publish": True,
                     "publish_order": position,
-                    "preflight_check": "full",
                     "wait_after_publish_seconds": 0,
-                    "verify_install": False,
                 }
                 for position, crate in enumerate(crates, start=1)
             ],
@@ -170,20 +167,9 @@ def load_install_values(path: Path) -> dict[str, object]:
         _require_string(crate_value.get("artifact"), f"artifacts.crates[{position}].artifact")
         _require_string(crate_value.get("package"), f"artifacts.crates[{position}].package")
         _require_string(crate_value.get("cargo_toml"), f"artifacts.crates[{position}].cargo_toml")
-        _require_string(
-            crate_value.get("preflight_check"), f"artifacts.crates[{position}].preflight_check"
-        )
-        if type(crate_value.get("required")) is not bool:
-            raise argparse.ArgumentTypeError(
-                f"artifacts.crates[{position}].required must be a boolean"
-            )
         if type(crate_value.get("publish")) is not bool:
             raise argparse.ArgumentTypeError(
                 f"artifacts.crates[{position}].publish must be a boolean"
-            )
-        if type(crate_value.get("verify_install")) is not bool:
-            raise argparse.ArgumentTypeError(
-                f"artifacts.crates[{position}].verify_install must be a boolean"
             )
         wait_after_publish_seconds = crate_value.get("wait_after_publish_seconds")
         if type(wait_after_publish_seconds) is not int or wait_after_publish_seconds < 0:
