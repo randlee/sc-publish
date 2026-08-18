@@ -56,7 +56,6 @@ def _channel_dispatch_config(manifest: dict, channel_name: str) -> tuple[str, di
         raise SystemExit(f"[channels.{channel_name}].dispatch_inputs must not override tag")
     return workflow, dispatch_inputs
 
-
 def _channel_credential_rehearsal(
     manifest: dict, channel_name: str
 ) -> tuple[str, dict[str, str]] | None:
@@ -80,7 +79,6 @@ def _channel_credential_rehearsal(
     workflow, _ = _channel_dispatch_config(manifest, channel_name)
     return workflow, rehearsal_inputs
 
-
 def _post_release_channel_preflight(manifest: dict, channel_name: str) -> dict[str, object]:
     """Return the non-secret readiness contract a channel worker must consume."""
     contract = _channel_contract(manifest, channel_name)
@@ -101,7 +99,6 @@ def _post_release_channel_preflight(manifest: dict, channel_name: str) -> dict[s
         "public_registry_checks": contract.get("public_registry_checks", False),
         "credential_rehearsal": rehearsal_plan,
     }
-
 
 def _root_channel_preflight(manifest: dict) -> list[dict[str, object]]:
     """Return non-secret requirements for root-workflow publish channels."""
@@ -133,8 +130,6 @@ def _root_channel_preflight(manifest: dict) -> list[dict[str, object]]:
         }
     )
     return channels
-
-
 def cmd_channel_preflight_results(args: argparse.Namespace) -> int:
     """Emit one non-secret result for every root and post-release channel."""
     try:
@@ -405,9 +400,7 @@ def cmd_validate_manifest(args: argparse.Namespace) -> int:
             raise SystemExit(f"{crate['cargo_toml']}: package mismatch: manifest={crate['package']} actual={actual}")
     python_artifacts = set()
     python_packages_by_name: dict[str, dict] = {}
-    python_distributions_by_name = {
-        entry["name"]: entry for entry in manifest["python_distributions"]
-    }
+    python_distributions_by_name = {entry["name"]: entry for entry in manifest["python_distributions"]}
     for index, package in enumerate(manifest["python_packages"], start=1):
         _require_keys(package, ("artifact", "package", "manifest", "module", "publish"), f"[[python_packages]] #{index}")
         artifact = package["artifact"]
@@ -421,9 +414,7 @@ def cmd_validate_manifest(args: argparse.Namespace) -> int:
         cargo_manifest = distribution.get("cargo_manifest")
         python_package_version = _python_project_version(manifest_path)
         if not python_package_version and cargo_manifest:
-            cargo_data = tomllib.loads(
-                (Path(args.workspace_toml).parent / cargo_manifest).read_text(encoding="utf-8")
-            )
+            cargo_data = tomllib.loads((Path(args.workspace_toml).parent / cargo_manifest).read_text(encoding="utf-8"))
             python_package_version = cargo_data.get("package", {}).get("version")
             if isinstance(python_package_version, dict) and python_package_version.get("workspace") is True:
                 python_package_version = workspace_version(Path(args.workspace_toml))
