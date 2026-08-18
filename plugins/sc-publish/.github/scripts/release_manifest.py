@@ -173,6 +173,7 @@ def _assert_python_package_version(
     path = _resolve_workspace_path(workspace_toml, relative_path)
     data = tomllib.loads(path.read_text(encoding="utf-8"))
     actual_version = data.get("project", {}).get("version")
+    dynamic_version = actual_version is None and "version" in data.get("project", {}).get("dynamic", [])
     if actual_version is None and "version" in data.get("project", {}).get("dynamic", []):
         if cargo_manifest is None:
             raise SystemExit(f"{relative_path}: dynamic version requires a Cargo manifest")
@@ -180,10 +181,11 @@ def _assert_python_package_version(
         actual_version = cargo_data.get("package", {}).get("version")
         if isinstance(actual_version, dict) and actual_version.get("workspace") is True:
             actual_version = workspace_version(workspace_toml)
-    if actual_version != expected_version:
+    expected = expected_version.split("-", 1)[0] if dynamic_version else expected_version
+    if actual_version != expected:
         raise SystemExit(
             f"{relative_path}: [project].version mismatch: "
-            f"expected {expected_version}, got {actual_version!r}"
+            f"expected {expected}, got {actual_version!r}"
         )
 
 

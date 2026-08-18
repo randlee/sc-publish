@@ -580,7 +580,7 @@ def test_verify_python_release_assets_accepts_manifest_declared_wheels_and_sdist
 def test_release_manifest_publishes_sc_sha_before_its_consumers() -> None:
     """Keep manifest-declared crate ordering and fields regression-tested."""
     manifest = require_manifest_crates()
-    crates = manifest["crates"]
+    crates = [entry for entry in manifest["crates"] if entry.get("publish", True)]
     orders = [entry["publish_order"] for entry in crates]
     assert orders == sorted(orders)
     assert len(orders) == len(set(orders))

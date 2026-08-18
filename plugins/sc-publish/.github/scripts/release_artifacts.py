@@ -710,7 +710,11 @@ def cmd_verify_version_lockstep(args: argparse.Namespace) -> int:
     checked_cargo_manifests: set[str] = set()
     for crate in manifest["crates"]:
         cargo_toml = crate["cargo_toml"]
-        _assert_workspace_inherited_version(workspace_toml, cargo_toml)
+        _assert_workspace_inherited_version(
+            workspace_toml,
+            cargo_toml,
+            allow_literal_base=not crate["publish"],
+        )
         checked_cargo_manifests.add(cargo_toml)
     for distribution in _python_distribution_entries(manifest):
         cargo_toml = distribution["cargo_manifest"]
