@@ -193,6 +193,8 @@ def _python_project_version(pyproject_toml: Path) -> str:
     data = tomllib.loads(pyproject_toml.read_text(encoding="utf-8"))
     project = data.get("project", {})
     version = project.get("version")
+    if version is None and "version" in project.get("dynamic", []):
+        return ""
     if not isinstance(version, str):
         raise SystemExit(f"{pyproject_toml}: [project].version must be a string")
     return version
@@ -220,7 +222,7 @@ def _python_distribution_entries(manifest: dict) -> list[dict]:
                 "name": distribution["name"],
                 "source": source,
                 "pyproject": package["manifest"],
-                "cargo_manifest": distribution.get("cargo_manifest", f"{source}/Cargo.toml"),
+                "cargo_manifest": distribution.get("cargo_manifest"),
                 "module_path": distribution.get(
                     "module_path", f"{source}/python/{package['module']}"
                 ),
