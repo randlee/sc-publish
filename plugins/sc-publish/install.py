@@ -19,6 +19,7 @@ if TYPE_CHECKING:
 
 
 PACKAGE_ROOT = Path(__file__).resolve().parent
+SOURCE_ROOT_MARKER = ".sc-publish-source-root"
 TEMPLATES = {
     Path("release/publish-channel-contracts.toml.j2"): Path(
         "release/publish-channel-contracts.toml"
@@ -192,10 +193,20 @@ def load_install_values(path: Path) -> dict[str, object]:
                 " non-negative integer"
             )
         publish_order = crate_value.get("publish_order")
-        if type(publish_order) is not int or publish_order <= 0:
+        if type(publish_order) is not int or publish_order < 0:
             raise argparse.ArgumentTypeError(
-                f"artifacts.crates[{position}].publish_order must be a positive integer"
+                f"artifacts.crates[{position}].publish_order must be a non-negative integer"
             )
+        if crate_value["publish"] and publish_order == 0:
+            raise argparse.ArgumentTypeError(
+                f"artifacts.crates[{position}].publish_order must be positive when publish is true"
+            )
+        if not crate_value["publish"] and publish_order != 0:
+            raise argparse.ArgumentTypeError(
+                f"artifacts.crates[{position}].publish_order must be zero when publish is false"
+            )
+        if not crate_value["publish"]:
+            continue
         if publish_order in publish_orders:
             raise argparse.ArgumentTypeError(
                 f"artifacts.crates[{position}].publish_order must be unique"
@@ -230,6 +241,7 @@ def package_files() -> list[Path]:
         path
         for path in PACKAGE_ROOT.rglob("*")
         if path.is_file()
+        and path.name != SOURCE_ROOT_MARKER
         and "__pycache__" not in path.parts
         and path.suffix != ".pyc"
     )

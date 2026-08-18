@@ -143,6 +143,9 @@ def verify_installer_is_idempotent(name: str, json_text: str) -> None:
         for source in INSTALLER.parent.rglob("*"):
             if not source.is_file() or "__pycache__" in source.parts:
                 continue
+            if source.name == ".sc-publish-source-root":
+                assert not (consumer / source.relative_to(INSTALLER.parent)).exists(), source
+                continue
             installed = consumer / source.relative_to(INSTALLER.parent)
             assert installed.read_bytes() == source.read_bytes(), installed
         with (consumer / "release" / "publish-artifacts.toml").open("rb") as output:

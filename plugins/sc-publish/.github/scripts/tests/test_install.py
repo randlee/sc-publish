@@ -13,7 +13,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 
-INSTALLER = Path(__file__).resolve().parents[3] / "install.py"
+INSTALLER = next(path / "install.py" for path in Path(__file__).resolve().parents if (path / "install.py").is_file())
 SPEC = importlib.util.spec_from_file_location("sc_publish_install", INSTALLER)
 assert SPEC is not None and SPEC.loader is not None
 INSTALL = importlib.util.module_from_spec(SPEC)
@@ -196,9 +196,9 @@ class InstallValuesTests(unittest.TestCase):
 
     def test_load_install_values_rejects_invalid_publish_orders(self) -> None:
         cases = {
-            "boolean": (True, "positive integer"),
-            "zero": (0, "positive integer"),
-            "negative": (-1, "positive integer"),
+            "boolean": (True, "integer"),
+            "zero": (0, "positive when publish is true"),
+            "negative": (-1, "non-negative integer"),
             "duplicate": (1, "unique"),
         }
         for name, (publish_order, message) in cases.items():
@@ -209,6 +209,14 @@ class InstallValuesTests(unittest.TestCase):
                 path.write_text(json.dumps(values), encoding="utf-8")
                 with self.assertRaisesRegex(Exception, message):
                     INSTALL.load_install_values(path)
+
+    def test_load_install_values_accepts_zero_order_for_non_published_crates(self) -> None:
+        values = self.valid_values()
+        values["artifacts"]["crates"][1].update(publish=False, publish_order=0)
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "input.json"
+            path.write_text(json.dumps(values), encoding="utf-8")
+            self.assertEqual(INSTALL.load_install_values(path), values)
 
     def test_load_install_values_rejects_missing_channel_activation(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -224,6 +232,9 @@ class InstallValuesTests(unittest.TestCase):
         parity-only check from accepting workflows that still call an obsolete
         consumer-local scripts/ path.
         """
+
+        if not (INSTALLER.parent / ".sc-publish-source-root").is_file():
+            self.skipTest("installed consumers do not re-run the package source installer")
 
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
