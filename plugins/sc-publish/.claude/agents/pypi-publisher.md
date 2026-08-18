@@ -1,6 +1,6 @@
 ---
 name: pypi-publisher
-version: 1.0.0
+version: 0.1.0
 description: Background PyPI release-channel worker for normalized project-name inquiry, TestPyPI rehearsal, and gated production publication.
 metadata:
   spawn_policy: background_agent_required

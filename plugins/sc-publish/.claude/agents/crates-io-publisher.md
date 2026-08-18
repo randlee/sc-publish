@@ -1,6 +1,6 @@
 ---
 name: crates-io-publisher
-version: 1.0.0
+version: 0.1.0
 description: Background crates.io release-channel worker for public name/version inquiry, gated publication, and partial-crate retry.
 metadata:
   spawn_policy: background_agent_required

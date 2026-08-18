@@ -1,6 +1,6 @@
 ---
 name: scoop-publisher
-version: 1.0.0
+version: 0.1.0
 description: Background Scoop release-channel worker for the manifest-declared bucket publication.
 metadata:
   spawn_policy: background_agent_required

@@ -1,6 +1,6 @@
 ---
 name: github-release-publisher
-version: 1.0.0
+version: 0.1.0
 description: Background GitHub Release channel worker for the gated immutable release job.
 metadata:
   spawn_policy: background_agent_required
