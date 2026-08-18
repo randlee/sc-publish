@@ -266,25 +266,14 @@ def require_full_channel_set() -> dict:
     return manifest
 
 
-def has_renderer_cli() -> bool:
-    workspace = repo_root() / "Cargo.toml"
-    if not workspace.is_file():
-        return False
-    result = subprocess.run(
-        ["cargo", "metadata", "--no-deps", "--format-version", "1"],
-        cwd=repo_root(),
-        text=True,
-        capture_output=True,
-        check=False,
+def renderer_binary() -> str | None:
+    manifest_path = repo_root() / "release" / "publish-artifacts.toml"
+    if not manifest_path.is_file():
+        return None
+    binaries = tomllib.loads(manifest_path.read_text(encoding="utf-8")).get(
+        "release_binaries", []
     )
-    if result.returncode != 0:
-        return False
-    packages = json.loads(result.stdout)["packages"]
-    return any(
-        target["name"] == "sc-compose" and "bin" in target["kind"]
-        for package in packages
-        for target in package["targets"]
-    )
+    return binaries[0].get("name") if binaries else None
 
 
 def python_pyproject_text() -> str:
@@ -595,6 +584,10 @@ def test_release_manifest_publishes_sc_sha_before_its_consumers() -> None:
     orders = [entry["publish_order"] for entry in crates]
     assert orders == sorted(orders)
     assert len(orders) == len(set(orders))
+    names = [entry["package"] for entry in crates]
+    if {"sc-sha", "sc-composer", "sc-compose"}.issubset(names):
+        positions = {name: names.index(name) for name in names}
+        assert positions["sc-sha"] < positions["sc-composer"] < positions["sc-compose"]
     for entry in crates:
         assert entry["artifact"]
         assert entry["package"]
@@ -1286,7 +1279,7 @@ def render_release_template(
             "run",
             "--quiet",
             "--bin",
-            "sc-compose",
+            renderer_binary(),
             "--",
             "render",
             "--mode",
@@ -1308,7 +1301,7 @@ def render_release_template(
 
 
 def test_release_channel_templates_render_to_valid_ruby_and_json(tmp_path: Path) -> None:
-    if not has_renderer_cli():
+    if renderer_binary() is None:
         pytest.skip("consumer does not include a sc-compose renderer workspace")
     formula = render_release_template(
         tmp_path,
@@ -1598,7 +1591,7 @@ def test_publish_kit_guidance_is_manifest_driven_and_token_non_disclosing() -> N
 
 
 def test_publishing_task_templates_render_recipient_contract(tmp_path: Path) -> None:
-    if not has_renderer_cli():
+    if renderer_binary() is None:
         pytest.skip("consumer does not include a sc-compose renderer workspace")
     cases = (
         (

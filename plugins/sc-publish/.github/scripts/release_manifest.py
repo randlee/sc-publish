@@ -149,13 +149,17 @@ def _resolve_workspace_path(workspace_toml: Path, relative_path: str) -> Path:
     return workspace_toml.parent / relative_path
 
 
-def _assert_workspace_inherited_version(workspace_toml: Path, relative_path: str) -> None:
+def _assert_workspace_inherited_version(workspace_toml: Path, relative_path: str, *, allow_literal_base: bool = False) -> None:
     path = _resolve_workspace_path(workspace_toml, relative_path)
     data = tomllib.loads(path.read_text(encoding="utf-8"))
     value = data.get("package", {}).get("version")
+    if isinstance(value, dict) and value.get("workspace") is True:
+        return
+    if allow_literal_base and value == workspace_version(workspace_toml).split("-", 1)[0]:
+        return
     if not isinstance(value, dict) or value.get("workspace") is not True:
         raise SystemExit(
-            f"{relative_path}: [package].version must inherit workspace.package.version"
+            f"{relative_path}: [package].version must inherit workspace.package.version or match workspace base"
         )
 
 
@@ -163,9 +167,19 @@ def _assert_python_package_version(
     workspace_toml: Path,
     relative_path: str,
     expected_version: str,
+    *,
+    cargo_manifest: str | None = None,
 ) -> None:
     path = _resolve_workspace_path(workspace_toml, relative_path)
-    actual_version = _python_project_version(path)
+    data = tomllib.loads(path.read_text(encoding="utf-8"))
+    actual_version = data.get("project", {}).get("version")
+    if actual_version is None and "version" in data.get("project", {}).get("dynamic", []):
+        if cargo_manifest is None:
+            raise SystemExit(f"{relative_path}: dynamic version requires a Cargo manifest")
+        cargo_data = tomllib.loads(_resolve_workspace_path(workspace_toml, cargo_manifest).read_text(encoding="utf-8"))
+        actual_version = cargo_data.get("package", {}).get("version")
+        if isinstance(actual_version, dict) and actual_version.get("workspace") is True:
+            actual_version = workspace_version(workspace_toml)
     if actual_version != expected_version:
         raise SystemExit(
             f"{relative_path}: [project].version mismatch: "

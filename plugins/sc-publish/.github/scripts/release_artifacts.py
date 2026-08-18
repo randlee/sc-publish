@@ -7,6 +7,7 @@ import re
 import shutil
 import subprocess
 import tarfile
+import tomllib
 import zipfile
 from email import message_from_bytes
 from pathlib import Path
@@ -714,10 +715,19 @@ def cmd_verify_version_lockstep(args: argparse.Namespace) -> int:
     for distribution in _python_distribution_entries(manifest):
         cargo_toml = distribution["cargo_manifest"]
         if cargo_toml not in checked_cargo_manifests:
-            _assert_workspace_inherited_version(workspace_toml, cargo_toml)
+            _assert_workspace_inherited_version(workspace_toml, cargo_toml, allow_literal_base=True)
             checked_cargo_manifests.add(cargo_toml)
     for package in manifest["python_packages"]:
-        _assert_python_package_version(workspace_toml, package["manifest"], version)
+        distribution = next(
+            (entry for entry in _python_distribution_entries(manifest) if entry["name"] == package["package"]),
+            None,
+        )
+        _assert_python_package_version(
+            workspace_toml,
+            package["manifest"],
+            version,
+            cargo_manifest=distribution["cargo_manifest"] if distribution else None,
+        )
     print("version lockstep verification passed")
     return 0
 

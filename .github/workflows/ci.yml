@@ -24,6 +24,14 @@ jobs:
         run: |
           "$SC_COMPOSE_PYTHON" -m unittest discover -s plugins/sc-publish/.github/scripts/tests -p 'test_install.py'
           "$SC_COMPOSE_PYTHON" -m unittest discover -s plugins/sc-publish/.github/scripts/tests -p 'test_publish_kit_*.py'
+      - name: Run vendored consumer test suite
+        run: |
+          "$SC_COMPOSE_PYTHON" -m pip install pytest
+          consumer="${RUNNER_TEMP}/publish-kit-consumer"
+          mkdir -p "$consumer"
+          python3 plugins/sc-publish/install.py --example-json "${RUNNER_TEMP}/publish-kit-install.json" "$consumer"
+          python3 plugins/sc-publish/install.py --input "${RUNNER_TEMP}/publish-kit-install.json" "$consumer"
+          PYTHONPATH="$consumer/.github/scripts" "$SC_COMPOSE_PYTHON" -m pytest "$consumer/.github/scripts/tests/test_release_artifacts.py" -q
       - name: Run generic manifest integration examples
         run: |
           "$SC_COMPOSE_PYTHON" .integration/manifest_examples.py
