@@ -26,7 +26,7 @@ version_source = "{{ release.version_source }}"
 tag_prefix = "{{ release.tag_prefix }}"
 
 {% for crate in artifacts.crates %}
-[[artifacts.crates]]
+[[crates]]
 name = "{{ crate.name }}"
 publish_order = {{ crate.publish_order }}
 {% endfor %}
