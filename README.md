@@ -1,25 +1,23 @@
 # sc-publish
 
-Shared, manifest-driven release/publish kit used across repositories. This
-repository is the single source of truth for the package: change shared assets
-here, then vendor them into consumers. Do not make consumer-local edits to
-overlay-owned files and copy them back as an alternate source.
+`sc-publish` is the single source of truth for the shared publishing package.
+The package lives at [`plugins/sc-publish`](plugins/sc-publish).
 
-The canonical, consumer-root overlay is under
-[`docs/publish-kit/overlay`](docs/publish-kit/overlay). Every overlay file is
-shared unchanged between consumers except `release/publish-artifacts.toml`,
-which each consumer supplies for its own crates, wheels, binaries, and enabled
-destinations. A generic starting point is at
-[`docs/publish-kit/examples/release/publish-artifacts.toml`](docs/publish-kit/examples/release/publish-artifacts.toml).
-
-Use [`docs/publish-kit/sync-overlay.sh`](docs/publish-kit/sync-overlay.sh) to
-vendor the overlay into a consumer repository. The consumer manifest is the
-only intentionally repository-specific file and remains consumer-owned:
+Install it into a consumer repository with fixed JSON arrays for the published
+artifacts:
 
 ```bash
-# Review every changed shared file as a unified diff; exits 1 when drift exists.
-docs/publish-kit/sync-overlay.sh --dry-run /path/to/consumer
-
-# Copy only changed overlay files; does not delete consumer-owned files.
-docs/publish-kit/sync-overlay.sh /path/to/consumer
+python3 plugins/sc-publish/install.py /path/to/consumer \
+  --crates '["example-core", "example-cli"]' \
+  --wheels '["example"]' \
+  --binaries '["example"]'
 ```
+
+Use `--dry-run` to print drift without changing the consumer.  With no
+arguments the installer prints help; `--example-json` provides a minimal
+source-discovered starting point for the current repository.
+
+The installer copies the shared `.claude`, `.github`, and release assets, then
+uses `sc-compose render` to write the consumer-specific release manifests.
+The non-CI examples in [`.integration/manifest_examples.py`](.integration/manifest_examples.py)
+render fixed `sc-compose` and `atm-core` inputs and compare parsed TOML values.

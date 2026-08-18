@@ -1,6 +1,6 @@
 ---
 name: winget-publisher
-version: 1.0.0
+version: 0.1.0
 description: Background winget release-channel worker for the manifest-declared package publication.
 metadata:
   spawn_policy: background_agent_required
