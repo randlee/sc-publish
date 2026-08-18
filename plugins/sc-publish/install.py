@@ -14,8 +14,6 @@ import tomllib
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-import sc_compose
-
 if TYPE_CHECKING:
     from sc_compose import ComposeRequest
 
@@ -153,13 +151,20 @@ def load_install_values(path: Path) -> dict[str, object]:
     for key in ("crates", "wheels", "binaries"):
         if not isinstance(artifacts.get(key), list):
             raise argparse.ArgumentTypeError(f"artifacts.{key} must be an array")
+    publish_orders: set[int] = set()
     for position, crate in enumerate(artifacts["crates"], start=1):
         crate_value = _require_mapping(crate, f"artifacts.crates[{position}]")
         _require_string(crate_value.get("name"), f"artifacts.crates[{position}].name")
-        if not isinstance(crate_value.get("publish_order"), int):
+        publish_order = crate_value.get("publish_order")
+        if type(publish_order) is not int or publish_order <= 0:
             raise argparse.ArgumentTypeError(
-                f"artifacts.crates[{position}].publish_order must be an integer"
+                f"artifacts.crates[{position}].publish_order must be a positive integer"
             )
+        if publish_order in publish_orders:
+            raise argparse.ArgumentTypeError(
+                f"artifacts.crates[{position}].publish_order must be unique"
+            )
+        publish_orders.add(publish_order)
     for position, wheel in enumerate(artifacts["wheels"], start=1):
         wheel_value = _require_mapping(wheel, f"artifacts.wheels[{position}]")
         _require_string(wheel_value.get("package"), f"artifacts.wheels[{position}].package")
@@ -209,6 +214,13 @@ def print_diff(destination: Path, source: Path, relative: Path) -> None:
 
 def render_template(template: Path, values: dict[str, object], output: Path) -> None:
     """Render a package template through the pinned Python binding contract."""
+    try:
+        import sc_compose
+    except ModuleNotFoundError as error:
+        raise RuntimeError(
+            "sc-compose Python bindings are required to install; run "
+            ".github/scripts/bootstrap_sc_compose.py first"
+        ) from error
     template_path = template if template.is_absolute() else PACKAGE_ROOT / template
     request: ComposeRequest = sc_compose.ComposeRequest(
         root=PACKAGE_ROOT,
@@ -222,24 +234,46 @@ def render_template(template: Path, values: dict[str, object], output: Path) -> 
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--dry-run", action="store_true", help="show drift and return 1 when installation is needed")
+    parser = argparse.ArgumentParser(
+        description=__doc__,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""workflow:
+  1. Generate a reviewable input: --example-json install.json REPOSITORY
+  2. Confirm artifact names, publish order, and enabled channels in install.json.
+  3. Install: --input install.json REPOSITORY
+  4. Verify a repeat install without changing files: --dry-run --input install.json REPOSITORY
+
+All installed package assets are shared verbatim. Only the two release manifests
+are rendered from the caller-owned JSON input. Exit 0 means clean/success; a
+dry-run returns 1 when consumer files would change.""",
+    )
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="show drift without changes; return 1 when installation is needed",
+    )
     parser.add_argument(
         "consumer_repository",
         nargs="?",
         type=Path,
         default=Path.cwd(),
+        metavar="REPOSITORY",
         help="consumer repository (default: current directory)",
     )
-    parser.add_argument(
+    input_mode = parser.add_mutually_exclusive_group()
+    input_mode.add_argument(
         "--input",
         type=Path,
+        metavar="INSTALL.json",
         help="required JSON file declaring release artifacts, explicit order, and channel activation",
     )
-    parser.add_argument(
+    input_mode.add_argument(
         "--example-json",
-        action="store_true",
-        help="print a source-discovered starting JSON document and exit; never installs",
+        nargs="?",
+        type=Path,
+        metavar="INSTALL.json",
+        const=Path("-"),
+        help="print or write a source-discovered starting JSON document and exit; never installs",
     )
     if len(sys.argv) == 1:
         parser.print_help()
@@ -249,10 +283,17 @@ def main() -> int:
     consumer = args.consumer_repository.resolve()
     if not consumer.is_dir():
         parser.error(f"consumer repository does not exist: {consumer}")
-    if args.example_json:
+    if args.example_json is not None:
         try:
-            print(json.dumps(example_values(consumer), indent=2))
-        except (subprocess.CalledProcessError, tomllib.TOMLDecodeError) as error:
+            example = f"{json.dumps(example_values(consumer), indent=2)}\n"
+            if args.example_json == Path("-"):
+                print(example, end="")
+            else:
+                if args.example_json.exists():
+                    parser.error(f"refusing to overwrite existing example input: {args.example_json}")
+                args.example_json.write_text(example, encoding="utf-8")
+                print(f"wrote reviewable install input: {args.example_json}")
+        except (OSError, subprocess.CalledProcessError, tomllib.TOMLDecodeError) as error:
             parser.error(str(error))
         return 0
     if args.input is None:
@@ -267,8 +308,11 @@ def main() -> int:
             template: Path(temporary_directory) / output.name
             for template, output in TEMPLATES.items()
         }
-        for template, rendered in rendered_templates.items():
-            render_template(template, values, rendered)
+        try:
+            for template, rendered in rendered_templates.items():
+                render_template(template, values, rendered)
+        except RuntimeError as error:
+            parser.error(str(error))
 
         changed = False
         for source in package_files():

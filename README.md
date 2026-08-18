@@ -9,16 +9,19 @@ are active; the installer never infers a publish surface or enables channels.
 
 ```bash
 publish_python="$(python3 plugins/sc-publish/.github/scripts/bootstrap_sc_compose.py --venv /tmp/sc-publish-1.4.1)"
-"$publish_python" plugins/sc-publish/install.py --example-json /path/to/consumer > install.json
+"$publish_python" plugins/sc-publish/install.py --example-json install.json /path/to/consumer
 # Review install.json and explicitly confirm the discovered release surface.
 # Crates enable crates.io; wheels enable PyPI; binaries enable GitHub Release,
 # Homebrew, Scoop, and Winget. Unsupported channels remain false.
 "$publish_python" plugins/sc-publish/install.py --input install.json /path/to/consumer
+"$publish_python" plugins/sc-publish/install.py --dry-run --input install.json /path/to/consumer
 ```
 
-Use `--dry-run` to print drift without changing the consumer.  With no
-arguments the installer prints help; `--example-json` provides a source-
-discovered starting point only and cannot install anything.
+Use `--dry-run` to print drift without changing the consumer; it returns `1`
+when an install would change files. With no arguments the installer prints
+help. `--example-json` prints a source-discovered starter document to stdout,
+or writes it when given an output path. It refuses to overwrite an existing
+contract, preserving reviewed publish-order and channel edits.
 
 The installer copies the shared `.claude`, `.github`, and release assets, then
 uses the pinned `sc-compose` Python bindings to write consumer-specific release manifests.
