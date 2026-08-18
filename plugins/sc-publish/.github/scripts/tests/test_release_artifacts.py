@@ -1651,6 +1651,23 @@ def test_release_preflight_collects_independent_failures_before_denial() -> None
     assert "REGISTRY_STATE" in preflight_text
 
 
+def test_release_requires_a_matching_resolved_preflight_receipt() -> None:
+    preflight_text = release_preflight_workflow_text()
+    release_text = release_workflow_text()
+
+    assert "Record resolved release receipt" in preflight_text
+    assert "release_receipt.py record" in preflight_text
+    assert "resolved-release-receipt" in preflight_text
+    assert "validation.json" in preflight_text
+    assert "preflight_run_id:" in release_text
+    assert "Verify final preflight provenance" in release_text
+    assert "Download resolved release receipt" in release_text
+    assert "release_receipt.py verify" in release_text
+    assert "fresh preflight required" not in release_text
+    assert "--toolchain-file Cargo.lock" in release_text
+    assert "Set up lint toolchain" in release_text
+
+
 def test_release_workflow_collects_wheels_without_redundant_zip_sweep() -> None:
     text = release_workflow_text()
 

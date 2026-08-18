@@ -15,8 +15,13 @@ on:
         options:
           - testpypi
           - production
+      preflight_run_id:
+        description: "Successful final Release Preflight workflow run ID for this exact commit"
+        required: true
+        type: string
 
 permissions:
+  actions: read
   contents: write
 
 env:
@@ -39,6 +44,52 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: "3.x"
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.94.1
+          components: rustfmt, clippy
+
+      - name: Set up lint toolchain
+        uses: ./.github/actions/setup-lint-toolchain
+
+      - name: Verify final preflight provenance
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          PREFLIGHT_RUN_ID: ${{ inputs.preflight_run_id }}
+        run: |
+          set -euo pipefail
+          run="$(gh api "repos/${REPOSITORY}/actions/runs/${PREFLIGHT_RUN_ID}")"
+          expected_sha="$(git rev-parse HEAD)"
+          jq -e --arg sha "${expected_sha}" '
+            .name == "Release Preflight" and
+            .conclusion == "success" and
+            .head_sha == $sha
+          ' <<<"${run}" >/dev/null
+
+      - name: Download resolved release receipt
+        uses: actions/download-artifact@v4
+        with:
+          name: resolved-release-receipt
+          path: .release-preflight-receipt
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: ${{ inputs.preflight_run_id }}
+
+      - name: Verify resolved release receipt
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 .github/scripts/release_receipt.py verify \
+            --source-commit "$(git rev-parse HEAD)" \
+            --manifest "${RELEASE_ARTIFACT_MANIFEST}" \
+            --toolchain-file Cargo.lock \
+            --toolchain-file .github/actions/setup-lint-toolchain/action.yml \
+            --toolchain-file .github/actions/setup-python-release-build/action.yml \
+            --receipt .release-preflight-receipt/receipt.json
 
       - name: Normalize version input
         id: meta

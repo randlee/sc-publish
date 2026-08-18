@@ -420,3 +420,69 @@ jobs:
           if [[ "${#failed[@]}" -gt 0 || "${#blocked[@]}" -gt 0 ]]; then
             exit 1
           fi
+
+      - name: Record resolved release receipt
+        if: ${{ always() }}
+        shell: bash
+        env:
+          OWNERSHIP: ${{ steps.ownership.outcome }}
+          SECRET_PLAN: ${{ steps.secret_plan.outcome }}
+          REPOSITORY_SECRETS: ${{ steps.repository_secrets.outcome }}
+          ENVIRONMENT_SECRETS: ${{ steps.environment_secrets.outcome }}
+          CREDENTIAL_LIVENESS: ${{ steps.credential_liveness.outcome }}
+          REGISTRY_STATE: ${{ steps.registry_state.outcome }}
+          META: ${{ steps.meta.outcome }}
+          FORMATTING: ${{ steps.formatting.outcome }}
+          CLIPPY: ${{ steps.clippy.outcome }}
+          WORKSPACE_TESTS: ${{ steps.workspace_tests.outcome }}
+          MANIFEST: ${{ steps.manifest.outcome }}
+          PUBLISH_ORDER: ${{ steps.publish_order.outcome }}
+          HELPERS: ${{ steps.helpers.outcome }}
+          VERSION: ${{ steps.version.outcome }}
+          VERSION_LOCKSTEP: ${{ steps.version_lockstep.outcome }}
+          UNPUBLISHED: ${{ steps.unpublished.outcome }}
+          PACKAGE_CHECKS: ${{ steps.package_checks.outcome }}
+          GITHUB_RELEASE_PERMISSIONS: ${{ steps.github_release_permissions.outcome }}
+          CHANNEL_RESULTS: ${{ steps.channel_results.outcome }}
+        run: |
+          set -euo pipefail
+          mkdir -p .release-preflight-receipt
+          jq -n \
+            --arg ownership "${OWNERSHIP}" \
+            --arg secret_plan "${SECRET_PLAN}" \
+            --arg repository_secrets "${REPOSITORY_SECRETS}" \
+            --arg environment_secrets "${ENVIRONMENT_SECRETS}" \
+            --arg credential_liveness "${CREDENTIAL_LIVENESS}" \
+            --arg registry_state "${REGISTRY_STATE}" \
+            --arg meta "${META}" \
+            --arg formatting "${FORMATTING}" \
+            --arg clippy "${CLIPPY}" \
+            --arg workspace_tests "${WORKSPACE_TESTS}" \
+            --arg manifest "${MANIFEST}" \
+            --arg publish_order "${PUBLISH_ORDER}" \
+            --arg helpers "${HELPERS}" \
+            --arg version "${VERSION}" \
+            --arg version_lockstep "${VERSION_LOCKSTEP}" \
+            --arg unpublished "${UNPUBLISHED}" \
+            --arg package_checks "${PACKAGE_CHECKS}" \
+            --arg github_release_permissions "${GITHUB_RELEASE_PERMISSIONS}" \
+            --arg channel_results "${CHANNEL_RESULTS}" \
+            '{ownership: $ownership, secret_plan: $secret_plan, repository_secrets: $repository_secrets, environment_secrets: $environment_secrets, credential_liveness: $credential_liveness, registry_state: $registry_state, meta: $meta, formatting: $formatting, clippy: $clippy, workspace_tests: $workspace_tests, manifest: $manifest, publish_order: $publish_order, helpers: $helpers, version: $version, version_lockstep: $version_lockstep, unpublished: $unpublished, package_checks: $package_checks, github_release_permissions: $github_release_permissions, channel_results: $channel_results}' \
+            > .release-preflight-receipt/validation.json
+          python3 .github/scripts/release_receipt.py record \
+            --source-commit "$(git rev-parse HEAD)" \
+            --manifest "${RELEASE_ARTIFACT_MANIFEST}" \
+            --toolchain-file Cargo.lock \
+            --toolchain-file .github/actions/setup-lint-toolchain/action.yml \
+            --toolchain-file .github/actions/setup-python-release-build/action.yml \
+            --validation-file .release-preflight-receipt/validation.json \
+            --output .release-preflight-receipt/receipt.json \
+            | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload resolved release receipt
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: resolved-release-receipt
+          path: .release-preflight-receipt
+          retention-days: 30
