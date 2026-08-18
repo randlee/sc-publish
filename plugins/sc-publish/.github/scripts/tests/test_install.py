@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -18,6 +20,41 @@ SPEC.loader.exec_module(INSTALL)
 
 
 class InstallValuesTests(unittest.TestCase):
+    def test_help_explains_the_explicit_install_workflow(self) -> None:
+        result = subprocess.run(
+            [sys.executable, "-S", str(INSTALLER), "--help"],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("--write-example INSTALL.json", result.stdout)
+        self.assertIn("workflow:", result.stdout)
+        self.assertIn("caller-owned JSON input", result.stdout)
+
+    def test_write_example_creates_a_complete_reviewable_contract(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            destination = root / "install.json"
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    "-S",
+                    str(INSTALLER),
+                    "--write-example",
+                    str(destination),
+                    str(root),
+                ],
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            contract = json.loads(destination.read_text(encoding="utf-8"))
+        self.assertEqual(set(contract["channels"]), set(INSTALL.CHANNEL_NAMES))
+        self.assertEqual(contract["artifacts"], {"crates": [], "wheels": [], "binaries": []})
+        self.assertIn("wrote reviewable install input", result.stdout)
+
     def test_example_json_enables_only_supported_channels(self) -> None:
         with (
             patch.object(INSTALL, "discover_crates", return_value=["example-core"]),
