@@ -14,6 +14,11 @@ package = "{{ wheel.package }}"
 python_package = "{{ wheel.python_package }}"
 {% endfor %}
 
+{% for binary in artifacts.binaries %}
+[[release_binaries]]
+name = "{{ binary }}"
+{% endfor %}
+
 {% for channel_name, channel in channels.items() %}
 [channels.{{ channel_name }}]
 enabled = {% if channel.enabled %}true{% else %}false{% endif %}
