@@ -20,14 +20,14 @@ on:
       uniffi_library:
         description: "Path to the UniFFI Rust library"
         required: true
-          type: string
-
-permissions:
-  contents: write
+        type: string
       generated_output:
         description: "Directory containing generated Go sources"
         required: true
         type: string
+
+permissions:
+  contents: write
 
 jobs:
   generate:

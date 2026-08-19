@@ -1,7 +1,7 @@
 name = "uniffi-bindgen-go"
-version = "0.7.1+v0.31.0"
+version = "v0.7.1+v0.31.0"
 release_tag = "uniffi-bindgen-go-v0.7.1-v0.31.0"
-repository = "NordSecurity/uniffi-bindgen-go"
+repository = "randlee/sc-publish"
 
 # The published generator is intentionally Linux-only.  Consumers that need
 # generated Go sources on another runner use the accompanying workflow's

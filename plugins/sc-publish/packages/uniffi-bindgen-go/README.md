@@ -10,8 +10,9 @@ repositories.
    [`release-workflow.yml`](release-workflow.yml).
 2. The workflow publishes the generated Go source as the
    `uniffi-bindgen-go-generated` artifact.
-3. macOS and Windows jobs download that generated-source artifact. They do not
-   compile or execute the Linux generator.
+3. Downstream macOS and Windows jobs may download that generated-source artifact;
+   this package workflow does not run platform jobs and never executes the Linux
+   generator outside Ubuntu.
 
 The package installer is for Ubuntu consumers that explicitly need the pinned
 binary:
