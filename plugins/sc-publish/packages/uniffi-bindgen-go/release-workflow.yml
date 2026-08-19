@@ -1,0 +1,66 @@
+name: Build uniffi-bindgen-go and generated Go sources
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: "GitHub release tag receiving the pinned generator assets"
+        required: true
+        type: string
+      uniffi_library:
+        description: "Path to the UniFFI Rust library"
+        required: true
+        type: string
+      generated_output:
+        description: "Directory containing generated Go sources"
+        required: true
+        type: string
+  workflow_call:
+    inputs:
+      uniffi_library:
+        description: "Path to the UniFFI Rust library"
+        required: true
+          type: string
+
+permissions:
+  contents: write
+      generated_output:
+        description: "Directory containing generated Go sources"
+        required: true
+        type: string
+
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Build pinned generator
+        run: |
+          cargo install uniffi-bindgen-go \
+            --git https://github.com/NordSecurity/uniffi-bindgen-go \
+            --tag v0.7.1+v0.31.0 --locked
+      - name: Generate Go sources
+        run: |
+          mkdir -p "${{ inputs.generated_output }}"
+          uniffi-bindgen-go generate "${{ inputs.uniffi_library }}" \
+            --out-dir "${{ inputs.generated_output }}"
+      - name: Package the Ubuntu generator
+        run: |
+          cp "$(command -v uniffi-bindgen-go)" uniffi-bindgen-go-linux-x86_64
+          sha256sum uniffi-bindgen-go-linux-x86_64 > uniffi-bindgen-go-linux-x86_64.sha256
+      - name: Upload generated Go sources
+        uses: actions/upload-artifact@v4
+        with:
+          name: uniffi-bindgen-go-generated
+          path: ${{ inputs.generated_output }}
+      - name: Upload pinned generator release assets
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+        run: |
+          gh release upload "$RELEASE_TAG" \
+            uniffi-bindgen-go-linux-x86_64 \
+            uniffi-bindgen-go-linux-x86_64.sha256 \
+            --clobber
