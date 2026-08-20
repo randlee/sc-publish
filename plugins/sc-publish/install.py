@@ -220,10 +220,26 @@ def load_install_values(path: Path) -> dict[str, object]:
         _require_array(homebrew.get("formulas"), "channels.homebrew.formulas"), start=1
     ):
         formula_value = _require_mapping(formula, f"channels.homebrew.formulas[{formula_position}]")
-        for field in ("path", "template", "class", "test_command", "test_output", "release_track"):
+        for field in (
+            "path",
+            "template",
+            "class",
+            "test_binary",
+            "test_command",
+            "test_output",
+            "release_track",
+        ):
             _require_string(formula_value.get(field), f"channels.homebrew.formulas[{formula_position}].{field}")
         _require_string_array(formula_value.get("binaries"), f"channels.homebrew.formulas[{formula_position}].binaries")
-    _require_entries(homebrew.get("assets"), "channels.homebrew.assets", ("key", "target"))
+    assets = _require_entries(homebrew.get("assets"), "channels.homebrew.assets", ("key", "target"))
+    asset_keys = [asset["key"] for asset in assets]
+    if len(asset_keys) != len(set(asset_keys)):
+        raise argparse.ArgumentTypeError("channels.homebrew.assets keys must be unique")
+    required_asset_keys = {"macos_arm", "macos_intel", "linux"}
+    if set(asset_keys) != required_asset_keys:
+        raise argparse.ArgumentTypeError(
+            "channels.homebrew.assets must declare exactly: macos_arm, macos_intel, linux"
+        )
     for name, fields in {
         "winget": ("identifier", "installer_target"),
         "scoop": (
@@ -354,11 +370,13 @@ def template_values(values: dict[str, object]) -> dict[str, object]:
 
 def package_files() -> list[Path]:
     """Return package files that are copied unchanged into a consumer."""
+    generated_outputs = {PACKAGE_ROOT / output for output in TEMPLATES.values()}
     return sorted(
         path
         for path in PACKAGE_ROOT.rglob("*")
         if path.is_file()
         and path.name != SOURCE_ROOT_MARKER
+        and path not in generated_outputs
         and "__pycache__" not in path.parts
         and path.suffix != ".pyc"
     )

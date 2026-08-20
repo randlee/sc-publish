@@ -66,7 +66,7 @@ def write_repo_fixture(tmp_path: Path, *, manifest_wheels: list[str]) -> tuple[P
     manifest = tmp_path / "release" / "publish-artifacts.toml"
     manifest.parent.mkdir(parents=True)
     (manifest.parent / "publish-channel-contracts.toml").write_text(
-        (repo_root() / "release" / "publish-channel-contracts.toml").read_text(
+        (repo_root() / "release" / "publish-channel-contracts.toml.j2").read_text(
             encoding="utf-8"
         ),
         encoding="utf-8",
@@ -1101,7 +1101,7 @@ def test_public_registry_inquiry_plan_is_contract_derived_and_read_only() -> Non
     crates = run_manifest_command(
         "public-registry-inquiry-plan",
         "--contracts",
-        "release/publish-channel-contracts.toml",
+        "release/publish-channel-contracts.toml.j2",
         "--channel",
         "crates_io",
         "--name",
@@ -1112,7 +1112,7 @@ def test_public_registry_inquiry_plan_is_contract_derived_and_read_only() -> Non
     pypi = run_manifest_command(
         "public-registry-inquiry-plan",
         "--contracts",
-        "release/publish-channel-contracts.toml",
+        "release/publish-channel-contracts.toml.j2",
         "--channel",
         "pypi",
         "--name",
@@ -1274,15 +1274,11 @@ def render_release_template(
     tmp_path: Path, template: str, variables: dict[str, object]
 ) -> str:
     variables_path = tmp_path / "vars.json"
+    output_path = tmp_path / "rendered"
     variables_path.write_text(json.dumps(variables), encoding="utf-8")
     result = subprocess.run(
         [
-            "cargo",
-            "run",
-            "--quiet",
-            "--bin",
-            renderer_binary(),
-            "--",
+            "sc-compose",
             "render",
             "--mode",
             "file",
@@ -1292,6 +1288,8 @@ def render_release_template(
             template,
             "--var-file",
             str(variables_path),
+            "--output",
+            str(output_path),
         ],
         cwd=repo_root(),
         text=True,
@@ -1299,12 +1297,10 @@ def render_release_template(
         check=False,
     )
     assert result.returncode == 0, result.stderr
-    return result.stdout
+    return output_path.read_text(encoding="utf-8")
 
 
 def test_release_channel_templates_render_to_valid_ruby_and_json(tmp_path: Path) -> None:
-    if renderer_binary() is None:
-        pytest.skip("consumer does not include a sc-compose renderer workspace")
     formula = render_release_template(
         tmp_path,
         "release/homebrew/formula.rb.j2",
@@ -1339,7 +1335,7 @@ def test_release_channel_templates_render_to_valid_ruby_and_json(tmp_path: Path)
     assert 'bin.install "bin/sc-compose"' in formula
     assert 'bin.install "bin/sc-compose-daemon"' in formula
     assert 'shell_output("#{bin}/" + "sc-compose-daemon"' in formula
-    assert '(pkgshare/"examples").install Dir["share/sc-compose/examples/*"]' in formula
+    assert '("pkgshare"/"examples").install Dir["share/sc-compose/examples/*"]' in formula
 
     scoop = render_release_template(
         tmp_path,
@@ -1485,7 +1481,7 @@ def test_publish_kit_guidance_is_manifest_driven_and_token_non_disclosing() -> N
         encoding="utf-8"
     )
     contracts = tomllib.loads(
-        (repo_root() / "release" / "publish-channel-contracts.toml").read_text(
+        (repo_root() / "release" / "publish-channel-contracts.toml.j2").read_text(
             encoding="utf-8"
         )
     )["channels"]
