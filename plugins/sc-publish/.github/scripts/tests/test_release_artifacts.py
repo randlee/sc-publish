@@ -257,6 +257,10 @@ def scoop_publish_workflow_text() -> str:
     return (repo_root() / ".github" / "workflows" / "scoop-publish.yml").read_text(encoding="utf-8")
 
 
+def crates_publish_workflow_text() -> str:
+    return (repo_root() / ".github" / "workflows" / "crates-publish.yml").read_text(encoding="utf-8")
+
+
 def release_preflight_workflow_text() -> str:
     return (repo_root() / ".github" / "workflows" / "release-preflight.yml").read_text(encoding="utf-8")
 
@@ -427,6 +431,27 @@ def test_validate_manifest_rejects_missing_or_unsupported_build_system(tmp_path:
     )
     assert missing.returncode != 0
     assert "unsupported build_system" in missing.stderr
+
+
+def test_crates_leg_is_separate_and_independently_retryable() -> None:
+    release_text = release_workflow_text()
+    crates_text = crates_publish_workflow_text()
+
+    # The GitHub Release leg must not depend on crates.io publication.
+    assert "needs: [gate-and-tag, build, build-python-wheels, build-python-sdists]" in release_text
+    assert "needs: [gate-and-tag, build, publish," not in release_text
+
+    assert "workflow_dispatch:" in crates_text
+    assert "uses: ./.github/actions/verify-published-release" in crates_text
+    assert "release_tag: ${{ inputs.tag }}" in crates_text
+    assert "group: publish-crates-${{ inputs.tag }}" in crates_text
+    assert "cancel-in-progress: false" in crates_text
+    assert "environment: crates-io" in crates_text
+    assert "publish_if_missing" in crates_text
+    assert "already published; skipping" in crates_text
+    assert "list-publish-plan" in crates_text
+    assert "gate-and-tag" not in crates_text
+    assert "CARGO_REGISTRY_TOKEN" in crates_text
 
 
 def test_release_workflows_gate_cargo_and_python_legs_on_the_manifest() -> None:

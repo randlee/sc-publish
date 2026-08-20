@@ -402,12 +402,15 @@ jobs:
 
   release:
     # Runs whenever every needed job succeeded or was legitimately skipped
-    # (crates or Python legs may be absent for this consumer).
+    # (crates or Python legs may be absent for this consumer). The GitHub
+    # Release leg deliberately does not depend on crates.io publication: a
+    # failed crates leg is retried in isolation via crates-publish.yml while
+    # the release and its dependent post-release channels proceed.
     if: >-
       ${{ !failure() && !cancelled() &&
           needs.gate-and-tag.outputs.release_target == 'production' &&
           needs.build.result == 'success' }}
-    needs: [gate-and-tag, build, publish, build-python-wheels, build-python-sdists]
+    needs: [gate-and-tag, build, build-python-wheels, build-python-sdists]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
