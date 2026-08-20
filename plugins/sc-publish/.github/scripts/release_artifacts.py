@@ -460,6 +460,15 @@ def cmd_build_plan(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_release_asset_patterns(args: argparse.Namespace) -> int:
+    """Print one required-asset regex per manifest release target."""
+    manifest = load_manifest(Path(args.manifest))
+    project = _require_project(manifest)
+    for target in _release_targets_by_name(manifest).values():
+        print(_release_asset_pattern(project, target))
+    return 0
+
+
 def cmd_release_target_matrix(args: argparse.Namespace) -> int:
     manifest = load_manifest(Path(args.manifest))
     print(json.dumps({"include": list(_release_targets_by_name(manifest).values())}, separators=(",", ":")))
@@ -867,6 +876,10 @@ def main() -> int:
     p = sub.add_parser("build-plan")
     p.add_argument("--manifest", required=True)
     p.set_defaults(func=cmd_build_plan)
+
+    p = sub.add_parser("release-asset-patterns")
+    p.add_argument("--manifest", required=True)
+    p.set_defaults(func=cmd_release_asset_patterns)
 
     p = sub.add_parser("release-target-matrix")
     p.add_argument("--manifest", required=True)

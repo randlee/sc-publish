@@ -454,6 +454,31 @@ def test_crates_leg_is_separate_and_independently_retryable() -> None:
     assert "CARGO_REGISTRY_TOKEN" in crates_text
 
 
+def test_github_release_leg_is_detect_and_skip(tmp_path: Path) -> None:
+    text = release_workflow_text()
+
+    assert "replace_release_assets:" in text
+    assert "release-asset-patterns" in text
+    assert "id: published_release_probe" in text
+    assert "uses: ./.github/actions/verify-published-release" in text
+    assert (
+        text.count(
+            "if: ${{ steps.published_release_probe.outcome != 'success' || inputs.replace_release_assets == true }}"
+        )
+        == 4
+    )
+    assert "already exists with every expected asset; skipping upload" in text
+    assert "deliberately replacing assets" in text
+    assert "'^checksums\\.txt$'" in text
+
+    _, manifest = write_repo_fixture(tmp_path, manifest_wheels=["ubuntu-latest"])
+    result = run_fixture_command(tmp_path, "release-asset-patterns", manifest=manifest)
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.splitlines() == [
+        r"^fixture_.*_x86_64\-unknown\-linux\-gnu\.tar\.gz$"
+    ]
+
+
 def test_release_workflows_gate_cargo_and_python_legs_on_the_manifest() -> None:
     release_text = release_workflow_text()
     preflight_text = release_preflight_workflow_text()
