@@ -479,6 +479,23 @@ def test_github_release_leg_is_detect_and_skip(tmp_path: Path) -> None:
     ]
 
 
+def test_winget_leg_probes_before_submitting_and_pins_the_releaser() -> None:
+    text = winget_publish_workflow_text()
+
+    assert "id: winget_probe" in text
+    assert "repos/microsoft/winget-pkgs/contents/${manifest_path}" in text
+    assert "search/issues" in text
+    assert "type:pr in:title" in text
+    assert "already_published" in text
+    assert "if: ${{ steps.winget_probe.outputs.already_published != 'true' }}" in text
+    # The third-party releaser must be pinned to an immutable commit SHA.
+    assert (
+        "uses: vedantmgoyal2009/winget-releaser@4ffc7888bffd451b357355dc214d43bb9f23917e # v2"
+        in text
+    )
+    assert "winget-releaser@v2\n" not in text
+
+
 def test_crates_already_published_detection_uses_exact_version_lookup() -> None:
     release_text = release_workflow_text()
     crates_text = crates_publish_workflow_text()
