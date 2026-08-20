@@ -4,7 +4,6 @@ import io
 import json
 import subprocess
 import sys
-import shutil
 import tarfile
 import tomllib
 import xml.etree.ElementTree as ET
@@ -1274,32 +1273,15 @@ def test_channel_recovery_workflows_require_a_published_release() -> None:
 def render_release_template(
     tmp_path: Path, template: str, variables: dict[str, object]
 ) -> str:
-    variables_path = tmp_path / "vars.json"
-    output_path = tmp_path / "rendered"
-    variables_path.write_text(json.dumps(variables), encoding="utf-8")
-    result = subprocess.run(
-        [
-            shutil.which("sc-compose")
-            or str(Path(sys.executable).with_name("sc-compose")),
-            "render",
-            "--mode",
-            "file",
-            "--root",
-            str(repo_root()),
-            "--file",
-            template,
-            "--var-file",
-            str(variables_path),
-            "--output",
-            str(output_path),
-        ],
-        cwd=repo_root(),
-        text=True,
-        capture_output=True,
-        check=False,
+    import sc_compose
+
+    request = sc_compose.ComposeRequest(
+        root=repo_root(),
+        mode=sc_compose.ComposeMode.file(template),
+        vars_input=variables,
+        policy=sc_compose.ComposePolicy(strict_undeclared_variables=False),
     )
-    assert result.returncode == 0, result.stderr
-    return output_path.read_text(encoding="utf-8")
+    return sc_compose.compose_file(request).rendered_text
 
 
 def test_release_channel_templates_render_to_valid_ruby_and_json(tmp_path: Path) -> None:
