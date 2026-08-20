@@ -18,7 +18,7 @@ The package installer is for Ubuntu consumers that explicitly need the pinned
 binary:
 
 ```bash
-python3 plugins/sc-publish/packages/uniffi-bindgen-go/install.py \
+python3 plugins/uniffi-bindgen-go/install.py \
   --bin-dir .venv/bin
 ```
 
