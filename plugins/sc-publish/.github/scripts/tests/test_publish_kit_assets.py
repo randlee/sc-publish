@@ -70,7 +70,7 @@ class PublishingAssetTests(unittest.TestCase):
         self.assertTrue(homebrew.is_file())
         self.assertTrue(scoop.is_file())
         self.assertIn("{{ formula_class }}", homebrew.read_text(encoding="utf-8"))
-        self.assertIn("{{ windows_url }}", scoop.read_text(encoding="utf-8"))
+        self.assertIn("{{ windows_url | tojson }}", scoop.read_text(encoding="utf-8"))
 
 
 if __name__ == "__main__":
