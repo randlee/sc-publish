@@ -49,6 +49,18 @@ jobs:
           set -euo pipefail
           echo "plan=$(python3 .github/scripts/release_artifacts.py preflight-secret-plan --manifest "${RELEASE_ARTIFACT_MANIFEST}")" >> "$GITHUB_OUTPUT"
 
+      - id: build_plan
+        name: Read build plan from release manifest
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -euo pipefail
+          plan="$(python3 .github/scripts/release_artifacts.py build-plan --manifest "${RELEASE_ARTIFACT_MANIFEST}")"
+          {
+            echo "has_crates=$(jq -r '.has_crates' <<<"${plan}")"
+            echo "workspace_toml=$(jq -r '.workspace_toml' <<<"${plan}")"
+          } >> "$GITHUB_OUTPUT"
+
       - id: repository_secrets
         name: Verify required release secrets are available
         if: ${{ always() && steps.secret_plan.outcome == 'success' }}
@@ -158,9 +170,11 @@ jobs:
           python-version: "3.x"
 
       - name: Set up lint toolchain
+        if: ${{ always() && steps.build_plan.outputs.has_crates == 'true' }}
         uses: ./.github/actions/setup-lint-toolchain
 
       - name: Install Rust toolchain
+        if: ${{ always() && steps.build_plan.outputs.has_crates == 'true' }}
         uses: dtolnay/rust-toolchain@master
         with:
           toolchain: 1.94.1
@@ -184,16 +198,19 @@ jobs:
 
       - id: formatting
         name: Check formatting
+        if: ${{ always() && steps.build_plan.outputs.has_crates == 'true' }}
         continue-on-error: true
         run: cargo fmt --all --check
 
       - id: clippy
         name: Run clippy
+        if: ${{ always() && steps.build_plan.outputs.has_crates == 'true' }}
         continue-on-error: true
         run: cargo clippy --all-targets --all-features -- -D warnings
 
       - id: workspace_tests
         name: Run workspace tests
+        if: ${{ always() && steps.build_plan.outputs.has_crates == 'true' }}
         continue-on-error: true
         run: cargo test --workspace
 
@@ -203,7 +220,7 @@ jobs:
         run: |
           python3 .github/scripts/release_artifacts.py validate-manifest \
             --manifest "${RELEASE_ARTIFACT_MANIFEST}" \
-            --workspace-toml Cargo.toml
+            --workspace-toml '${{ steps.build_plan.outputs.workspace_toml }}'
 
       - id: publish_order
         name: Validate publish_order dependency graph
@@ -211,7 +228,7 @@ jobs:
         run: |
           python3 .github/scripts/release_artifacts.py validate-publish-order \
             --manifest "${RELEASE_ARTIFACT_MANIFEST}" \
-            --workspace-toml Cargo.toml
+            --workspace-toml '${{ steps.build_plan.outputs.workspace_toml }}'
 
       - id: helpers
         name: Verify release helper files exist
@@ -226,7 +243,7 @@ jobs:
         run: |
           python3 .github/scripts/release_artifacts.py verify-version \
             --manifest "${RELEASE_ARTIFACT_MANIFEST}" \
-            --workspace-toml Cargo.toml \
+            --workspace-toml '${{ steps.build_plan.outputs.workspace_toml }}' \
             --version '${{ steps.meta.outputs.release_version }}'
 
       - id: version_lockstep
@@ -235,7 +252,7 @@ jobs:
         run: |
           python3 .github/scripts/release_artifacts.py verify-version-lockstep \
             --manifest "${RELEASE_ARTIFACT_MANIFEST}" \
-            --workspace-toml Cargo.toml
+            --workspace-toml '${{ steps.build_plan.outputs.workspace_toml }}'
 
       - id: unpublished
         name: Verify release version is unpublished on crates.io
@@ -299,6 +316,7 @@ jobs:
 
       - id: package_checks
         name: Run dependency-aware package checks
+        if: ${{ always() && steps.build_plan.outputs.has_crates == 'true' }}
         continue-on-error: true
         shell: bash
         run: |
@@ -367,6 +385,8 @@ jobs:
         env:
           OWNERSHIP: ${{ steps.ownership.outcome }}
           SECRET_PLAN: ${{ steps.secret_plan.outcome }}
+          BUILD_PLAN: ${{ steps.build_plan.outcome }}
+          HAS_CRATES: ${{ steps.build_plan.outputs.has_crates }}
           REPOSITORY_SECRETS: ${{ steps.repository_secrets.outcome }}
           ENVIRONMENT_SECRETS: ${{ steps.environment_secrets.outcome }}
           CREDENTIAL_LIVENESS: ${{ steps.credential_liveness.outcome }}
@@ -398,21 +418,25 @@ jobs:
           }
           record ownership "${OWNERSHIP}"
           record secret-plan "${SECRET_PLAN}"
+          record build-plan "${BUILD_PLAN}"
           record repository-secrets "${REPOSITORY_SECRETS}"
           record environment-secrets "${ENVIRONMENT_SECRETS}"
           record credential-liveness "${CREDENTIAL_LIVENESS}"
           record registry-state "${REGISTRY_STATE}"
           record version-input "${META}"
-          record formatting "${FORMATTING}"
-          record clippy "${CLIPPY}"
-          record workspace-tests "${WORKSPACE_TESTS}"
+          # Cargo checks only apply when the manifest declares [[crates]].
+          if [[ "${HAS_CRATES}" == "true" ]]; then
+            record formatting "${FORMATTING}"
+            record clippy "${CLIPPY}"
+            record workspace-tests "${WORKSPACE_TESTS}"
+            record package-checks "${PACKAGE_CHECKS}"
+          fi
           record manifest "${MANIFEST}"
           record publish-order "${PUBLISH_ORDER}"
           record helpers "${HELPERS}"
           record version "${VERSION}"
           record version-lockstep "${VERSION_LOCKSTEP}"
           record unpublished-version "${UNPUBLISHED}"
-          record package-checks "${PACKAGE_CHECKS}"
           record github-release-permissions "${GITHUB_RELEASE_PERMISSIONS}"
           record channel-results "${CHANNEL_RESULTS}"
           printf 'Preflight complete: failed=[%s] blocked=[%s]\n' \

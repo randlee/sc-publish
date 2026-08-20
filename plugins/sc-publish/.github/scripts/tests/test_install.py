@@ -8,6 +8,7 @@ import re
 import subprocess
 import sys
 import tempfile
+import tomllib
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -208,6 +209,57 @@ class InstallValuesTests(unittest.TestCase):
             path.write_text(json.dumps(values), encoding="utf-8")
             with self.assertRaisesRegex(Exception, "project.license"):
                 INSTALL.load_install_values(path)
+
+    def test_load_install_values_accepts_a_channel_subset(self) -> None:
+        values = self.valid_values()
+        for name in ("homebrew", "winget", "scoop"):
+            del values["channels"][name]
+        # renderer_archive_path is only required for homebrew/scoop consumers.
+        del values["project"]["renderer_archive_path"]
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "input.json"
+            path.write_text(json.dumps(values), encoding="utf-8")
+            loaded = INSTALL.load_install_values(path)
+        self.assertEqual(set(loaded["channels"]), {"pypi"})
+        template = INSTALL.template_values(loaded)
+        self.assertTrue(template["has_channel_pypi"])
+        for name in ("homebrew", "winget", "scoop"):
+            self.assertFalse(template[f"has_channel_{name}"])
+            self.assertIn(name, template["channels"])
+
+    def test_load_install_values_rejects_unknown_channel_names(self) -> None:
+        values = self.valid_values()
+        values["channels"]["npm"] = {"workflow": "npm.yml", "dispatch_inputs": {}}
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "input.json"
+            path.write_text(json.dumps(values), encoding="utf-8")
+            with self.assertRaisesRegex(Exception, "unsupported name"):
+                INSTALL.load_install_values(path)
+
+    def test_render_omits_undeclared_channel_tables(self) -> None:
+        try:
+            import sc_compose  # noqa: F401
+        except ModuleNotFoundError:
+            self.skipTest("sc-compose bindings are not provisioned in this environment")
+        values = self.valid_values()
+        for name in ("homebrew", "winget", "scoop"):
+            del values["channels"][name]
+        del values["project"]["renderer_archive_path"]
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "input.json"
+            path.write_text(json.dumps(values), encoding="utf-8")
+            loaded = INSTALL.load_install_values(path)
+            output = Path(directory) / "publish-artifacts.toml"
+            INSTALL.render_template(
+                Path("release/publish-artifacts.toml.j2"), loaded, output
+            )
+            manifest = tomllib.loads(output.read_text(encoding="utf-8"))
+        self.assertEqual(set(manifest["channels"]), {"pypi"})
+        self.assertEqual(manifest["channels"]["pypi"]["production_repository"], "pypi")
+        self.assertEqual(
+            manifest["python_distributions"][1]["build_system"], "setuptools"
+        )
+        self.assertNotIn("renderer_archive_path", manifest["project"])
 
     def test_load_install_values_rejects_ambiguous_python_distribution(self) -> None:
         values = self.valid_values()

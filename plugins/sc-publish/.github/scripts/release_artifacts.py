@@ -20,6 +20,7 @@ from release_manifest import (
     _channel_names,
     _channel_preflight_result,
     _homebrew_formulas_for_tag,
+    _public_registry_checks,
     _validate_homebrew_formulas,
     _python_distribution_entries,
     _python_distribution_expectations,
@@ -31,6 +32,7 @@ from release_manifest import (
     _require_project,
     load_channel_contracts,
     load_manifest,
+    manifest_workspace_toml,
     package_name,
     workspace_members,
     workspace_version,
@@ -168,63 +170,6 @@ def cmd_channel_preflight_results(args: argparse.Namespace) -> int:
     ]
     print(json.dumps({"tag": tag, "channels": results}, separators=(",", ":")))
     return 0
-
-
-def _normalize_pypi_name(name: str) -> str:
-    """Return the PEP 503 canonical project name used for public lookups."""
-    return re.sub(r"[-_.]+", "-", name).lower()
-
-
-def _url_from_contract(template: str, name: str, version: str) -> str:
-    return template.format(name=name, version=version)
-
-
-def _public_registry_checks(
-    contracts: dict[str, dict], channel_name: str, name: str, version: str | None
-) -> list[dict[str, str | None]]:
-    """Build contract-derived public registry checks for one candidate artifact."""
-    try:
-        contract = contracts[channel_name]
-    except KeyError as error:
-        raise SystemExit(f"channel contract missing for {channel_name}") from error
-    if not contract.get("public_registry_checks", False):
-        raise SystemExit(f"{channel_name} does not support a public registry inquiry")
-
-    normalized_name = _normalize_pypi_name(name) if channel_name == "pypi" else name
-    registry_contracts: list[dict[str, str]]
-    if channel_name == "crates_io":
-        registry_contracts = [
-            {
-                "name": "crates.io",
-                "project_lookup_url": contract["project_lookup_url"],
-                "version_lookup_url": contract["version_lookup_url"],
-                "version_policy": "must_be_absent",
-            }
-        ]
-    else:
-        registry_contracts = contract.get("registries", [])
-
-    checks: list[dict[str, str]] = []
-    for registry in registry_contracts:
-        check: dict[str, str | None] = {
-            "channel": channel_name,
-            "agent": contract["agent"],
-            "registry": registry["name"],
-            "name": name,
-            "normalized_name": normalized_name,
-            "expected_version": version,
-            "project_lookup_url": _url_from_contract(
-                registry["project_lookup_url"], normalized_name, version or ""
-            ),
-            "version_lookup_url": (
-                _url_from_contract(registry["version_lookup_url"], normalized_name, version)
-                if version
-                else None
-            ),
-            "version_policy": registry["version_policy"],
-        }
-        checks.append(check)
-    return checks
 
 
 def cmd_public_registry_check_plan(args: argparse.Namespace) -> int:
@@ -382,22 +327,23 @@ def cmd_validate_manifest(args: argparse.Namespace) -> int:
         )
     if "scoop" in channel_names:
         _validate_scoop_channel(manifest)
-    members = workspace_members(Path(args.workspace_toml))
-    missing = []
-    for crate in manifest["crates"]:
-        if crate["cargo_toml"].removesuffix("/Cargo.toml") not in members:
-            missing.append(crate["cargo_toml"])
-    if missing:
-        raise SystemExit(f"manifest references non-member crates: {', '.join(missing)}")
     seen = set()
-    for crate in manifest["crates"]:
-        artifact = crate["artifact"]
-        if artifact in seen:
-            raise SystemExit(f"duplicate artifact: {artifact}")
-        seen.add(artifact)
-        actual = package_name(Path(crate["cargo_toml"]))
-        if actual != crate["package"]:
-            raise SystemExit(f"{crate['cargo_toml']}: package mismatch: manifest={crate['package']} actual={actual}")
+    if manifest["crates"]:
+        members = workspace_members(Path(args.workspace_toml))
+        missing = []
+        for crate in manifest["crates"]:
+            if crate["cargo_toml"].removesuffix("/Cargo.toml") not in members:
+                missing.append(crate["cargo_toml"])
+        if missing:
+            raise SystemExit(f"manifest references non-member crates: {', '.join(missing)}")
+        for crate in manifest["crates"]:
+            artifact = crate["artifact"]
+            if artifact in seen:
+                raise SystemExit(f"duplicate artifact: {artifact}")
+            seen.add(artifact)
+            actual = package_name(Path(crate["cargo_toml"]))
+            if actual != crate["package"]:
+                raise SystemExit(f"{crate['cargo_toml']}: package mismatch: manifest={crate['package']} actual={actual}")
     python_artifacts = set()
     python_packages_by_name: dict[str, dict] = {}
     python_distributions_by_name = {entry["name"]: entry for entry in manifest["python_distributions"]}
@@ -451,6 +397,9 @@ def cmd_validate_manifest(args: argparse.Namespace) -> int:
             raise SystemExit(
                 f"[[python_distributions]] #{index}: Python module path does not exist: {module_root}"
             )
+    # Resolves each distribution's build system; a missing or unsupported
+    # build_system is a manifest validation failure.
+    _python_distribution_entries(manifest)
     print("manifest validation passed")
     return 0
 
@@ -462,21 +411,26 @@ def cmd_list_publish_plan(args: argparse.Namespace) -> int:
     return 0
 
 
+def _python_matrix_entry(distribution: dict) -> dict[str, str]:
+    return {
+        "artifact": distribution["artifact"],
+        "name": distribution["name"],
+        "source": distribution["source"],
+        "pyproject": distribution["pyproject"],
+        "cargo_manifest": distribution["cargo_manifest"] or "",
+        "build_system": distribution["build_system"],
+    }
+
+
 def cmd_python_wheel_matrix(args: argparse.Namespace) -> int:
     manifest = load_manifest(Path(args.manifest))
+    # An empty matrix is valid: Rust-only consumers build no Python wheels,
+    # and release.yml skips the wheel jobs when the matrix is empty.
     include = [
-        {
-            "artifact": distribution["artifact"],
-            "name": distribution["name"],
-            "os": os_name,
-            "pyproject": distribution["pyproject"],
-            "cargo_manifest": distribution["cargo_manifest"],
-        }
+        {**_python_matrix_entry(distribution), "os": os_name}
         for distribution in _python_distribution_entries(manifest)
         for os_name in distribution["wheels"]
     ]
-    if not include:
-        raise SystemExit("manifest must define at least one Python wheel build")
     print(json.dumps({"include": include}, separators=(",", ":")))
     return 0
 
@@ -484,16 +438,25 @@ def cmd_python_wheel_matrix(args: argparse.Namespace) -> int:
 def cmd_python_sdist_matrix(args: argparse.Namespace) -> int:
     manifest = load_manifest(Path(args.manifest))
     include = [
-        {
-            "artifact": distribution["artifact"],
-            "name": distribution["name"],
-            "pyproject": distribution["pyproject"],
-            "cargo_manifest": distribution["cargo_manifest"],
-        }
+        _python_matrix_entry(distribution)
         for distribution in _python_distribution_entries(manifest)
         if distribution["sdist"]
     ]
     print(json.dumps({"include": include}, separators=(",", ":")))
+    return 0
+
+
+def cmd_build_plan(args: argparse.Namespace) -> int:
+    """Emit the manifest-derived flags that gate optional build legs."""
+    manifest = load_manifest(Path(args.manifest))
+    entries = _python_distribution_entries(manifest)
+    plan = {
+        "has_crates": bool(manifest["crates"]),
+        "has_python_wheels": any(entry["wheels"] for entry in entries),
+        "has_python_sdists": any(entry["sdist"] for entry in entries),
+        "workspace_toml": manifest_workspace_toml(manifest),
+    }
+    print(json.dumps(plan, separators=(",", ":")))
     return 0
 
 
@@ -900,6 +863,10 @@ def main() -> int:
     p = sub.add_parser("python-sdist-matrix")
     p.add_argument("--manifest", required=True)
     p.set_defaults(func=cmd_python_sdist_matrix)
+
+    p = sub.add_parser("build-plan")
+    p.add_argument("--manifest", required=True)
+    p.set_defaults(func=cmd_build_plan)
 
     p = sub.add_parser("release-target-matrix")
     p.add_argument("--manifest", required=True)

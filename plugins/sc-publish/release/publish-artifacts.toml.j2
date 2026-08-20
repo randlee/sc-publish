@@ -46,6 +46,10 @@ required_variables:
   - has_readme_dependency_crate
   - has_renderer_archive_path
   - has_installed_docs
+  - has_channel_pypi
+  - has_channel_homebrew
+  - has_channel_winget
+  - has_channel_scoop
 ---
 schema_version = {{ schema_version }}
 
@@ -121,13 +125,16 @@ sdist = {{ distribution.sdist }}
 wheels = {{ distribution.wheels }}
 {% endfor %}
 
+{% if has_channel_pypi %}
 [channels.pypi]
 workflow = {{ channels.pypi.workflow }}
 dispatch_inputs = {{ channels.pypi.dispatch_inputs }}
 credential_rehearsal_inputs = {{ channels.pypi.credential_rehearsal_inputs }}
 test_repository = {{ channels.pypi.test_repository }}
 production_repository = {{ channels.pypi.production_repository }}
+{% endif %}
 
+{% if has_channel_homebrew %}
 [channels.homebrew]
 workflow = {{ channels.homebrew.workflow }}
 dispatch_inputs = {{ channels.homebrew.dispatch_inputs }}
@@ -151,13 +158,17 @@ release_track = {{ formula.release_track }}
 key = {{ asset.key }}
 target = {{ asset.target }}
 {% endfor %}
+{% endif %}
 
+{% if has_channel_winget %}
 [channels.winget]
 workflow = {{ channels.winget.workflow }}
 dispatch_inputs = {{ channels.winget.dispatch_inputs }}
 identifier = {{ channels.winget.identifier }}
 installer_target = {{ channels.winget.installer_target }}
+{% endif %}
 
+{% if has_channel_scoop %}
 [channels.scoop]
 workflow = {{ channels.scoop.workflow }}
 dispatch_inputs = {{ channels.scoop.dispatch_inputs }}
@@ -167,3 +178,4 @@ manifest_template = {{ channels.scoop.manifest_template }}
 installer_target = {{ channels.scoop.installer_target }}
 binary = {{ channels.scoop.binary }}
 renderer_target = {{ channels.scoop.renderer_target }}
+{% endif %}
