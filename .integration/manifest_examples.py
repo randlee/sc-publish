@@ -32,6 +32,10 @@ def complete_values() -> dict[str, object]:
             "license": "MIT",
             "readme_dependency_crate": "example-core",
             "renderer_archive_path": "bin/example",
+            # Optional single-source declarations for the Cargo workspace
+            # manifest path and the release Rust toolchain.
+            "workspace_toml": "Cargo.toml",
+            "rust_toolchain": "1.94.1",
         },
         "release_targets": [
             {"target": "x86_64-unknown-linux-gnu", "os": "ubuntu-latest", "archive": "tar.gz"},
@@ -44,23 +48,17 @@ def complete_values() -> dict[str, object]:
                 "artifact": "example-core",
                 "package": "example-core",
                 "cargo_toml": "crates/example-core/Cargo.toml",
-                "required": True,
                 "publish": True,
                 "publish_order": 1,
-                "preflight_check": "locked",
                 "wait_after_publish_seconds": 0,
-                "verify_install": False,
             },
             {
                 "artifact": "example-python",
                 "package": "example-python",
                 "cargo_toml": "crates/example-python/Cargo.toml",
-                "required": True,
                 "publish": False,
                 "publish_order": 0,
-                "preflight_check": "locked",
                 "wait_after_publish_seconds": 0,
-                "verify_install": True,
             },
         ],
         "release_binaries": [
@@ -76,11 +74,6 @@ def complete_values() -> dict[str, object]:
             },
             {"name": "example-daemon"},
         ],
-        "installed_docs": {
-            "source_root": "docs",
-            "install_root": "share/doc/example",
-            "entrypoint": "share/doc/example/README.md",
-        },
         "python_packages": [
             {
                 "artifact": "example-wheel",
@@ -178,6 +171,16 @@ def verify_complete_contract() -> None:
     """Assert rendering preserves every required manifest section."""
     values = complete_values()
     assert render(values) == values
+
+    # Post-release channels are opt-in per consumer: undeclared channels must
+    # render no table at all, and the declared subset must round-trip.
+    subset = complete_values()
+    subset["channels"] = {"pypi": subset["channels"]["pypi"]}
+    # Only Homebrew/Scoop consumers require a published renderer archive path.
+    del subset["project"]["renderer_archive_path"]
+    rendered_subset = render(subset)
+    assert set(rendered_subset["channels"]) == {"pypi"}
+    assert rendered_subset == subset
 
     with tempfile.TemporaryDirectory() as directory:
         temporary = Path(directory)
