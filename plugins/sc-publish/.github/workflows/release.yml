@@ -298,7 +298,9 @@ jobs:
       has_crates: ${{ steps.manifest.outputs.has_crates }}
       has_python_wheels: ${{ steps.manifest.outputs.has_python_wheels }}
       has_python_sdists: ${{ steps.manifest.outputs.has_python_sdists }}
+      python_upload_tool: ${{ steps.manifest.outputs.python_upload_tool }}
       rust_toolchain: ${{ steps.manifest.outputs.rust_toolchain }}
+      workspace_toml: ${{ steps.manifest.outputs.workspace_toml }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -316,7 +318,9 @@ jobs:
             echo "has_crates=$(jq -r '.has_crates' <<<"${plan}")"
             echo "has_python_wheels=$(jq -r '.has_python_wheels' <<<"${plan}")"
             echo "has_python_sdists=$(jq -r '.has_python_sdists' <<<"${plan}")"
+            echo "python_upload_tool=$(jq -r '.python_upload_tool' <<<"${plan}")"
             echo "rust_toolchain=$(jq -r '.rust_toolchain' <<<"${plan}")"
+            echo "workspace_toml=$(jq -r '.workspace_toml' <<<"${plan}")"
           } >> "$GITHUB_OUTPUT"
 
   build-python-wheels:
@@ -337,6 +341,7 @@ jobs:
           pyproject: ${{ matrix.pyproject }}
           build_system: ${{ matrix.build_system }}
           rust_toolchain: ${{ needs.release-plan.outputs.rust_toolchain }}
+          workspace_toml: ${{ needs.release-plan.outputs.workspace_toml }}
       - name: Build wheels (maturin)
         if: ${{ matrix.build_system == 'maturin' }}
         run: maturin build --release --manifest-path ${{ matrix.cargo_manifest }} --out dist
@@ -368,6 +373,7 @@ jobs:
           pyproject: ${{ matrix.pyproject }}
           build_system: ${{ matrix.build_system }}
           rust_toolchain: ${{ needs.release-plan.outputs.rust_toolchain }}
+          workspace_toml: ${{ needs.release-plan.outputs.workspace_toml }}
       - name: Build sdist (maturin)
         if: ${{ matrix.build_system == 'maturin' }}
         run: maturin sdist --manifest-path ${{ matrix.cargo_manifest }} --out dist
@@ -390,7 +396,7 @@ jobs:
       ${{ !failure() && !cancelled() &&
           needs.gate-and-tag.outputs.release_target == 'testpypi' &&
           (needs.build-python-wheels.result == 'success' || needs.build-python-sdists.result == 'success') }}
-    needs: [gate-and-tag, build-python-wheels, build-python-sdists]
+    needs: [gate-and-tag, release-plan, build-python-wheels, build-python-sdists]
     runs-on: ubuntu-latest
     environment: testpypi
     steps:
@@ -411,7 +417,11 @@ jobs:
         with:
           python-version: "3.11"
       - name: Install maturin
+        if: ${{ needs.release-plan.outputs.python_upload_tool == 'maturin' }}
         run: python -m pip install maturin==1.9.4
+      - name: Install twine
+        if: ${{ needs.release-plan.outputs.python_upload_tool == 'twine' }}
+        run: python -m pip install twine==6.1.0
       - name: Verify manifest-declared Python release assets
         shell: bash
         run: |
@@ -420,10 +430,18 @@ jobs:
             --manifest "${RELEASE_ARTIFACT_MANIFEST}" \
             --asset-dir dist
       - name: Publish wheels and sdist to TestPyPI
+        if: ${{ needs.release-plan.outputs.python_upload_tool == 'maturin' }}
         env:
           MATURIN_PYPI_TOKEN: ${{ secrets.TEST_PYPI_API_TOKEN }}
           MATURIN_NON_INTERACTIVE: "1"
         run: maturin upload --repository testpypi --non-interactive --skip-existing dist/*.whl dist/*.tar.gz
+      - name: Publish wheels and sdist to TestPyPI with twine
+        if: ${{ needs.release-plan.outputs.python_upload_tool == 'twine' }}
+        env:
+          TWINE_NON_INTERACTIVE: "1"
+          TWINE_USERNAME: __token__
+          TWINE_PASSWORD: ${{ secrets.TEST_PYPI_API_TOKEN }}
+        run: python -m twine upload --repository testpypi --skip-existing dist/*.whl dist/*.tar.gz
 
   release:
     # Runs whenever every needed job succeeded or was legitimately skipped
