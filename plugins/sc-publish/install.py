@@ -28,6 +28,48 @@ TEMPLATES = {
 
 CHANNEL_NAMES = ("pypi", "homebrew", "scoop", "winget")
 
+# Copied byte-for-byte, but installed under a different consumer path so the
+# kit never overwrites a consumer-owned file of the same name.
+RENAMED_FILES = {
+    Path("README.md"): Path("README.sc-publish.md"),
+}
+
+# Empty sentinels keep every channel variable defined under
+# strict-undeclared-variable rendering; undeclared channels render no table.
+CHANNEL_TEMPLATE_SENTINELS: dict[str, dict[str, Any]] = {
+    "pypi": {
+        "workflow": "",
+        "dispatch_inputs": {},
+        "credential_rehearsal_inputs": {},
+        "test_repository": "",
+        "production_repository": "",
+    },
+    "homebrew": {
+        "workflow": "",
+        "dispatch_inputs": {},
+        "tap_repository": "",
+        "renderer_target": "",
+        "formulas": [],
+        "assets": [],
+    },
+    "winget": {
+        "workflow": "",
+        "dispatch_inputs": {},
+        "identifier": "",
+        "installer_target": "",
+    },
+    "scoop": {
+        "workflow": "",
+        "dispatch_inputs": {},
+        "bucket_repository": "",
+        "manifest_path": "",
+        "manifest_template": "",
+        "installer_target": "",
+        "binary": "",
+        "renderer_target": "",
+    },
+}
+
 
 def _require_mapping(value: object, label: str) -> dict[str, Any]:
     if not isinstance(value, dict):
@@ -100,8 +142,9 @@ def load_install_values(path: Path) -> dict[str, object]:
     project = _require_mapping(values.get("project"), "project")
     for field in ("name", "archive_prefix", "description", "homepage", "license"):
         _require_string(project.get(field), f"project.{field}")
-    if "readme_dependency_crate" in project:
-        _require_string(project["readme_dependency_crate"], "project.readme_dependency_crate")
+    for field in ("readme_dependency_crate", "workspace_toml", "rust_toolchain"):
+        if field in project:
+            _require_string(project[field], f"project.{field}")
 
     release_targets = _require_entries(
         values.get("release_targets"), "release_targets", ("target", "os", "archive")
@@ -116,12 +159,7 @@ def load_install_values(path: Path) -> dict[str, object]:
         _require_string(crate_value.get("artifact"), f"crates[{position}].artifact")
         _require_string(crate_value.get("package"), f"crates[{position}].package")
         _require_string(crate_value.get("cargo_toml"), f"crates[{position}].cargo_toml")
-        _require_string(
-            crate_value.get("preflight_check"), f"crates[{position}].preflight_check"
-        )
-        _require_boolean(crate_value.get("required"), f"crates[{position}].required")
         publish = _require_boolean(crate_value.get("publish"), f"crates[{position}].publish")
-        _require_boolean(crate_value.get("verify_install"), f"crates[{position}].verify_install")
         _require_non_negative_integer(
             crate_value.get("wait_after_publish_seconds"),
             f"crates[{position}].wait_after_publish_seconds",
@@ -163,11 +201,6 @@ def load_install_values(path: Path) -> dict[str, object]:
                 "bundled_paths.homebrew_destination_components",
             )
 
-    if "installed_docs" in values:
-        installed_docs = _require_mapping(values["installed_docs"], "installed_docs")
-        for field in ("source_root", "install_root", "entrypoint"):
-            _require_string(installed_docs.get(field), f"installed_docs.{field}")
-
     _require_entries(
         values.get("python_packages"),
         "python_packages",
@@ -199,47 +232,53 @@ def load_install_values(path: Path) -> dict[str, object]:
                     f"python_distributions[{position}].build_system must be setuptools"
                 )
 
+    # Channels are opt-in: a consumer declares only the post-release channels
+    # it actually publishes to, and only declared channels render a table.
     channels = _require_mapping(values.get("channels"), "channels")
-    missing_channels = [name for name in CHANNEL_NAMES if name not in channels]
-    if missing_channels:
+    unknown_channels = sorted(set(channels) - set(CHANNEL_NAMES))
+    if unknown_channels:
         raise argparse.ArgumentTypeError(
-            f"channels must explicitly declare: {', '.join(missing_channels)}"
+            f"channels declares unsupported name(s): {', '.join(unknown_channels)}"
         )
     for name in CHANNEL_NAMES:
+        if name not in channels:
+            continue
         channel = _require_mapping(channels[name], f"channels.{name}")
         _require_string(channel.get("workflow"), f"channels.{name}.workflow")
         _require_string_mapping(channel.get("dispatch_inputs"), f"channels.{name}.dispatch_inputs")
-    pypi = _require_mapping(channels["pypi"], "channels.pypi")
-    _require_string_mapping(pypi.get("credential_rehearsal_inputs", {}), "channels.pypi.credential_rehearsal_inputs")
-    for field in ("test_repository", "production_repository"):
-        _require_string(pypi.get(field), f"channels.pypi.{field}")
-    homebrew = _require_mapping(channels["homebrew"], "channels.homebrew")
-    for field in ("tap_repository", "renderer_target"):
-        _require_string(homebrew.get(field), f"channels.homebrew.{field}")
-    for formula_position, formula in enumerate(
-        _require_array(homebrew.get("formulas"), "channels.homebrew.formulas"), start=1
-    ):
-        formula_value = _require_mapping(formula, f"channels.homebrew.formulas[{formula_position}]")
-        for field in (
-            "path",
-            "template",
-            "class",
-            "test_binary",
-            "test_command",
-            "test_output",
-            "release_track",
+    if "pypi" in channels:
+        pypi = _require_mapping(channels["pypi"], "channels.pypi")
+        _require_string_mapping(pypi.get("credential_rehearsal_inputs", {}), "channels.pypi.credential_rehearsal_inputs")
+        for field in ("test_repository", "production_repository"):
+            _require_string(pypi.get(field), f"channels.pypi.{field}")
+    if "homebrew" in channels:
+        homebrew = _require_mapping(channels["homebrew"], "channels.homebrew")
+        for field in ("tap_repository", "renderer_target"):
+            _require_string(homebrew.get(field), f"channels.homebrew.{field}")
+        for formula_position, formula in enumerate(
+            _require_array(homebrew.get("formulas"), "channels.homebrew.formulas"), start=1
         ):
-            _require_string(formula_value.get(field), f"channels.homebrew.formulas[{formula_position}].{field}")
-        _require_string_array(formula_value.get("binaries"), f"channels.homebrew.formulas[{formula_position}].binaries")
-    assets = _require_entries(homebrew.get("assets"), "channels.homebrew.assets", ("key", "target"))
-    asset_keys = [asset["key"] for asset in assets]
-    if len(asset_keys) != len(set(asset_keys)):
-        raise argparse.ArgumentTypeError("channels.homebrew.assets keys must be unique")
-    required_asset_keys = {"macos_arm", "macos_intel", "linux"}
-    if set(asset_keys) != required_asset_keys:
-        raise argparse.ArgumentTypeError(
-            "channels.homebrew.assets must declare exactly: macos_arm, macos_intel, linux"
-        )
+            formula_value = _require_mapping(formula, f"channels.homebrew.formulas[{formula_position}]")
+            for field in (
+                "path",
+                "template",
+                "class",
+                "test_binary",
+                "test_command",
+                "test_output",
+                "release_track",
+            ):
+                _require_string(formula_value.get(field), f"channels.homebrew.formulas[{formula_position}].{field}")
+            _require_string_array(formula_value.get("binaries"), f"channels.homebrew.formulas[{formula_position}].binaries")
+        assets = _require_entries(homebrew.get("assets"), "channels.homebrew.assets", ("key", "target"))
+        asset_keys = [asset["key"] for asset in assets]
+        if len(asset_keys) != len(set(asset_keys)):
+            raise argparse.ArgumentTypeError("channels.homebrew.assets keys must be unique")
+        required_asset_keys = {"macos_arm", "macos_intel", "linux"}
+        if set(asset_keys) != required_asset_keys:
+            raise argparse.ArgumentTypeError(
+                "channels.homebrew.assets must declare exactly: macos_arm, macos_intel, linux"
+            )
     for name, fields in {
         "winget": ("identifier", "installer_target"),
         "scoop": (
@@ -251,6 +290,8 @@ def load_install_values(path: Path) -> dict[str, object]:
             "renderer_target",
         ),
     }.items():
+        if name not in channels:
+            continue
         channel = _require_mapping(channels[name], f"channels.{name}")
         for field in fields:
             _require_string(channel.get(field), f"channels.{name}.{field}")
@@ -297,8 +338,14 @@ def template_values(values: dict[str, object]) -> dict[str, object]:
     project = _require_mapping(values["project"], "project")
     channels = _require_mapping(values["channels"], "channels")
     converted_channels: dict[str, Any] = {}
-    for name, channel_value in channels.items():
-        channel = _require_mapping(channel_value, f"channels.{name}")
+    for name in CHANNEL_NAMES:
+        if name not in channels:
+            converted_channels[name] = _toml_scalars(
+                dict(CHANNEL_TEMPLATE_SENTINELS[name]),
+                ("dispatch_inputs", "credential_rehearsal_inputs"),
+            )
+            continue
+        channel = _require_mapping(channels[name], f"channels.{name}")
         converted = _toml_scalars(
             channel,
             ("dispatch_inputs", "credential_rehearsal_inputs"),
@@ -337,11 +384,8 @@ def template_values(values: dict[str, object]) -> dict[str, object]:
     template_project = _toml_scalars(project)
     template_project.setdefault("readme_dependency_crate", "")
     template_project.setdefault("renderer_archive_path", "")
-    installed_docs = _toml_scalars(
-        _require_mapping(values.get("installed_docs", {}), "installed_docs")
-    )
-    for field in ("source_root", "install_root", "entrypoint"):
-        installed_docs.setdefault(field, "")
+    template_project.setdefault("workspace_toml", "")
+    template_project.setdefault("rust_toolchain", "")
 
     return {
         "schema_version": _toml_literal(values["schema_version"]),
@@ -355,8 +399,6 @@ def template_values(values: dict[str, object]) -> dict[str, object]:
             for crate in _require_array(values["crates"], "crates")
         ],
         "release_binaries": release_binaries,
-        "installed_docs": installed_docs,
-        "has_installed_docs": "installed_docs" in values,
         "python_packages": [
             _toml_scalars(_require_mapping(package, "python_packages entry"))
             for package in _require_array(values["python_packages"], "python_packages")
@@ -365,6 +407,9 @@ def template_values(values: dict[str, object]) -> dict[str, object]:
         "channels": converted_channels,
         "has_readme_dependency_crate": "readme_dependency_crate" in project,
         "has_renderer_archive_path": "renderer_archive_path" in project,
+        "has_workspace_toml": "workspace_toml" in project,
+        "has_rust_toolchain": "rust_toolchain" in project,
+        **{f"has_channel_{name}": name in channels for name in CHANNEL_NAMES},
     }
 
 
@@ -477,7 +522,9 @@ dry-run returns 1 when consumer files would change.""",
 
         changed = False
         for source in package_files():
-            relative = source.relative_to(PACKAGE_ROOT)
+            relative = RENAMED_FILES.get(
+                source.relative_to(PACKAGE_ROOT), source.relative_to(PACKAGE_ROOT)
+            )
             destination = consumer / relative
             if destination.exists() and destination.read_bytes() == source.read_bytes():
                 continue
