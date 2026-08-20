@@ -55,6 +55,16 @@ jobs:
     needs: verify-release
     runs-on: ubuntu-latest
     steps:
+      - name: Require Homebrew tap credential
+        shell: bash
+        env:
+          HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [[ -z "${HOMEBREW_TAP_TOKEN}" ]]; then
+            echo 'HOMEBREW_TAP_TOKEN is required to update the configured Homebrew tap.' >&2
+            exit 1
+          fi
       - name: Checkout workflow support
         uses: actions/checkout@v4
       - name: Checkout immutable release source
@@ -87,7 +97,7 @@ jobs:
           config = json.loads(os.environ["CHANNEL_CONFIG"])
           project = config["project"]
           channel = config["channel"]
-          assets = []
+          assets = {}
           archives_by_target = {}
 
           def download(target):
@@ -104,8 +114,16 @@ jobs:
           for asset in config["channel"]["assets"]:
               target = config["release_targets"][asset["target"]]
               url, path = download(target)
-              assets.append(
-                  {"key": asset["key"], "url": url, "sha256": hashlib.file_digest(path.open("rb"), "sha256").hexdigest()}
+              if asset["key"] in assets:
+                  raise SystemExit(f"duplicate Homebrew asset key: {asset['key']}")
+              assets[asset["key"]] = {
+                  "url": url,
+                  "sha256": hashlib.file_digest(path.open("rb"), "sha256").hexdigest(),
+              }
+          required_asset_keys = {"macos_arm", "macos_intel", "linux"}
+          if set(assets) != required_asset_keys:
+              raise SystemExit(
+                  "Homebrew assets must contain exactly: macos_arm, macos_intel, linux"
               )
           renderer_target = config["release_targets"][channel["renderer_target"]]
           renderer_archive = archives_by_target.get(renderer_target["target"])

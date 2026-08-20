@@ -35,6 +35,8 @@ def complete_values() -> dict[str, object]:
         },
         "release_targets": [
             {"target": "x86_64-unknown-linux-gnu", "os": "ubuntu-latest", "archive": "tar.gz"},
+            {"target": "aarch64-apple-darwin", "os": "macos-latest", "archive": "tar.gz"},
+            {"target": "x86_64-apple-darwin", "os": "macos-latest", "archive": "tar.gz"},
             {"target": "x86_64-pc-windows-msvc", "os": "windows-latest", "archive": "zip"},
         ],
         "crates": [
@@ -125,12 +127,17 @@ def complete_values() -> dict[str, object]:
                         "template": "release/homebrew/formula.rb.j2",
                         "class": "Example",
                         "binaries": ["example", "example-daemon"],
+                        "test_binary": "example-daemon",
                         "test_command": "--help",
                         "test_output": "Example release package",
                         "release_track": "stable",
                     }
                 ],
-                "assets": [{"key": "linux", "target": "x86_64-unknown-linux-gnu"}],
+                "assets": [
+                    {"key": "macos_arm", "target": "aarch64-apple-darwin"},
+                    {"key": "macos_intel", "target": "x86_64-apple-darwin"},
+                    {"key": "linux", "target": "x86_64-unknown-linux-gnu"},
+                ],
             },
             "winget": {
                 "workflow": "winget-publish.yml",

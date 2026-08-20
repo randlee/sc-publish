@@ -124,12 +124,17 @@ class InstallValuesTests(unittest.TestCase):
                             "template": "release/homebrew/formula.rb.j2",
                             "class": "Example",
                             "binaries": ["example"],
+                            "test_binary": "example",
                             "test_command": "--help",
                             "test_output": "Example release package",
                             "release_track": "stable",
                         }
                     ],
-                    "assets": [{"key": "linux", "target": "x86_64-unknown-linux-gnu"}],
+                    "assets": [
+                        {"key": "macos_arm", "target": "aarch64-apple-darwin"},
+                        {"key": "macos_intel", "target": "x86_64-apple-darwin"},
+                        {"key": "linux", "target": "x86_64-unknown-linux-gnu"},
+                    ],
                 },
                 "winget": {
                     "workflow": "winget-publish.yml",
