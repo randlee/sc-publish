@@ -475,31 +475,34 @@ jobs:
       # Detect-and-skip: rebuilt archives are not reproducible, so re-uploading
       # over an existing complete release would silently change asset SHA256s
       # that Homebrew/Scoop may already pin. Replacing assets requires the
-      # explicit replace_release_assets opt-in.
+      # explicit replace_release_assets opt-in. The probe fails closed: only a
+      # confirmed-absent (or confirmed-incomplete) release proceeds to
+      # build/upload; an indeterminate probe result fails this job instead of
+      # silently rebuilding over already-digested assets.
       - id: published_release_probe
-        name: Probe for an already-complete published release
-        continue-on-error: true
+        name: Probe for an already-complete published release (fail closed)
         uses: ./.github/actions/verify-published-release
         with:
           release_tag: ${{ needs.gate-and-tag.outputs.release_tag }}
           asset_patterns: ${{ steps.expected_assets.outputs.patterns }}
+          probe: 'true'
 
       - name: Skip upload for the already-complete release
-        if: ${{ steps.published_release_probe.outcome == 'success' && inputs.replace_release_assets != true }}
+        if: ${{ steps.published_release_probe.outputs.release_state == 'complete' && inputs.replace_release_assets != true }}
         run: echo "GitHub Release ${{ needs.gate-and-tag.outputs.release_tag }} already exists with every expected asset; skipping upload. Dispatch with replace_release_assets=true to deliberately replace assets."
 
       - name: Log explicit asset replacement opt-in
-        if: ${{ steps.published_release_probe.outcome == 'success' && inputs.replace_release_assets == true }}
+        if: ${{ steps.published_release_probe.outputs.release_state == 'complete' && inputs.replace_release_assets == true }}
         run: echo "replace_release_assets=true; deliberately replacing assets on published release ${{ needs.gate-and-tag.outputs.release_tag }} (their SHA256s will change)."
 
       - name: Download all artifacts
-        if: ${{ steps.published_release_probe.outcome != 'success' || inputs.replace_release_assets == true }}
+        if: ${{ steps.published_release_probe.outputs.release_state != 'complete' || inputs.replace_release_assets == true }}
         uses: actions/download-artifact@v4
         with:
           path: artifacts
 
       - name: Collect archives
-        if: ${{ steps.published_release_probe.outcome != 'success' || inputs.replace_release_assets == true }}
+        if: ${{ steps.published_release_probe.outputs.release_state != 'complete' || inputs.replace_release_assets == true }}
         run: |
           mkdir -p release
           find artifacts -type f \( -name '*.tar.gz' -o -name '*.zip' \) -exec mv {} release/ \;
@@ -507,7 +510,7 @@ jobs:
           ls -la release/
 
       - name: Generate checksums
-        if: ${{ steps.published_release_probe.outcome != 'success' || inputs.replace_release_assets == true }}
+        if: ${{ steps.published_release_probe.outputs.release_state != 'complete' || inputs.replace_release_assets == true }}
         working-directory: release
         run: |
           files=()
@@ -520,7 +523,7 @@ jobs:
           sha256sum "${files[@]}" > checksums.txt
 
       - name: Create GitHub Release
-        if: ${{ steps.published_release_probe.outcome != 'success' || inputs.replace_release_assets == true }}
+        if: ${{ steps.published_release_probe.outputs.release_state != 'complete' || inputs.replace_release_assets == true }}
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ needs.gate-and-tag.outputs.release_tag }}

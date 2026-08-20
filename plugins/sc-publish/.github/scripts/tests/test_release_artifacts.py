@@ -461,12 +461,21 @@ def test_github_release_leg_is_detect_and_skip(tmp_path: Path) -> None:
     assert "release-asset-patterns" in text
     assert "id: published_release_probe" in text
     assert "uses: ./.github/actions/verify-published-release" in text
+    # The probe fails closed: no continue-on-error swallowing transient API
+    # failures, and every build/upload leg keys off the confirmed state.
+    assert "continue-on-error" not in text
+    assert "probe: 'true'" in text
     assert (
         text.count(
-            "if: ${{ steps.published_release_probe.outcome != 'success' || inputs.replace_release_assets == true }}"
+            "if: ${{ steps.published_release_probe.outputs.release_state != 'complete' || inputs.replace_release_assets == true }}"
         )
         == 4
     )
+    assert (
+        "if: ${{ steps.published_release_probe.outputs.release_state == 'complete' && inputs.replace_release_assets != true }}"
+        in text
+    )
+    assert "steps.published_release_probe.outcome" not in text
     assert "already exists with every expected asset; skipping upload" in text
     assert "deliberately replacing assets" in text
     assert "'^checksums\\.txt$'" in text
