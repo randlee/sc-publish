@@ -4,6 +4,7 @@ import io
 import json
 import subprocess
 import sys
+import shutil
 import tarfile
 import tomllib
 import xml.etree.ElementTree as ET
@@ -1278,7 +1279,8 @@ def render_release_template(
     variables_path.write_text(json.dumps(variables), encoding="utf-8")
     result = subprocess.run(
         [
-            "sc-compose",
+            shutil.which("sc-compose")
+            or str(Path(sys.executable).with_name("sc-compose")),
             "render",
             "--mode",
             "file",
