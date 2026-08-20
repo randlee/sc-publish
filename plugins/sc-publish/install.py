@@ -142,8 +142,9 @@ def load_install_values(path: Path) -> dict[str, object]:
     project = _require_mapping(values.get("project"), "project")
     for field in ("name", "archive_prefix", "description", "homepage", "license"):
         _require_string(project.get(field), f"project.{field}")
-    if "readme_dependency_crate" in project:
-        _require_string(project["readme_dependency_crate"], "project.readme_dependency_crate")
+    for field in ("readme_dependency_crate", "workspace_toml", "rust_toolchain"):
+        if field in project:
+            _require_string(project[field], f"project.{field}")
 
     release_targets = _require_entries(
         values.get("release_targets"), "release_targets", ("target", "os", "archive")
@@ -158,12 +159,7 @@ def load_install_values(path: Path) -> dict[str, object]:
         _require_string(crate_value.get("artifact"), f"crates[{position}].artifact")
         _require_string(crate_value.get("package"), f"crates[{position}].package")
         _require_string(crate_value.get("cargo_toml"), f"crates[{position}].cargo_toml")
-        _require_string(
-            crate_value.get("preflight_check"), f"crates[{position}].preflight_check"
-        )
-        _require_boolean(crate_value.get("required"), f"crates[{position}].required")
         publish = _require_boolean(crate_value.get("publish"), f"crates[{position}].publish")
-        _require_boolean(crate_value.get("verify_install"), f"crates[{position}].verify_install")
         _require_non_negative_integer(
             crate_value.get("wait_after_publish_seconds"),
             f"crates[{position}].wait_after_publish_seconds",
@@ -204,11 +200,6 @@ def load_install_values(path: Path) -> dict[str, object]:
                 bundled.get("homebrew_destination_components"),
                 "bundled_paths.homebrew_destination_components",
             )
-
-    if "installed_docs" in values:
-        installed_docs = _require_mapping(values["installed_docs"], "installed_docs")
-        for field in ("source_root", "install_root", "entrypoint"):
-            _require_string(installed_docs.get(field), f"installed_docs.{field}")
 
     _require_entries(
         values.get("python_packages"),
@@ -393,11 +384,8 @@ def template_values(values: dict[str, object]) -> dict[str, object]:
     template_project = _toml_scalars(project)
     template_project.setdefault("readme_dependency_crate", "")
     template_project.setdefault("renderer_archive_path", "")
-    installed_docs = _toml_scalars(
-        _require_mapping(values.get("installed_docs", {}), "installed_docs")
-    )
-    for field in ("source_root", "install_root", "entrypoint"):
-        installed_docs.setdefault(field, "")
+    template_project.setdefault("workspace_toml", "")
+    template_project.setdefault("rust_toolchain", "")
 
     return {
         "schema_version": _toml_literal(values["schema_version"]),
@@ -411,8 +399,6 @@ def template_values(values: dict[str, object]) -> dict[str, object]:
             for crate in _require_array(values["crates"], "crates")
         ],
         "release_binaries": release_binaries,
-        "installed_docs": installed_docs,
-        "has_installed_docs": "installed_docs" in values,
         "python_packages": [
             _toml_scalars(_require_mapping(package, "python_packages entry"))
             for package in _require_array(values["python_packages"], "python_packages")
@@ -421,6 +407,8 @@ def template_values(values: dict[str, object]) -> dict[str, object]:
         "channels": converted_channels,
         "has_readme_dependency_crate": "readme_dependency_crate" in project,
         "has_renderer_archive_path": "renderer_archive_path" in project,
+        "has_workspace_toml": "workspace_toml" in project,
+        "has_rust_toolchain": "rust_toolchain" in project,
         **{f"has_channel_{name}": name in channels for name in CHANNEL_NAMES},
     }
 

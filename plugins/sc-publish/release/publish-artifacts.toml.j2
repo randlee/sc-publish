@@ -12,12 +12,11 @@ required_variables:
   - project.license
   - project.readme_dependency_crate
   - project.renderer_archive_path
+  - project.workspace_toml
+  - project.rust_toolchain
   - release_targets
   - crates
   - release_binaries
-  - installed_docs.source_root
-  - installed_docs.install_root
-  - installed_docs.entrypoint
   - python_packages
   - python_distributions
   - channels.pypi.workflow
@@ -45,7 +44,8 @@ required_variables:
   - channels.winget.installer_target
   - has_readme_dependency_crate
   - has_renderer_archive_path
-  - has_installed_docs
+  - has_workspace_toml
+  - has_rust_toolchain
   - has_channel_pypi
   - has_channel_homebrew
   - has_channel_winget
@@ -65,6 +65,12 @@ readme_dependency_crate = {{ project.readme_dependency_crate }}
 {% if has_renderer_archive_path %}
 renderer_archive_path = {{ project.renderer_archive_path }}
 {% endif %}
+{% if has_workspace_toml %}
+workspace_toml = {{ project.workspace_toml }}
+{% endif %}
+{% if has_rust_toolchain %}
+rust_toolchain = {{ project.rust_toolchain }}
+{% endif %}
 
 {% for target in release_targets %}
 [[release_targets]]
@@ -78,12 +84,9 @@ archive = {{ target.archive }}
 artifact = {{ crate.artifact }}
 package = {{ crate.package }}
 cargo_toml = {{ crate.cargo_toml }}
-required = {{ crate.required }}
 publish = {{ crate.publish }}
 publish_order = {{ crate.publish_order }}
-preflight_check = {{ crate.preflight_check }}
 wait_after_publish_seconds = {{ crate.wait_after_publish_seconds }}
-verify_install = {{ crate.verify_install }}
 {% endfor %}
 
 {% for binary in release_binaries %}
@@ -93,13 +96,6 @@ name = {{ binary.name }}
 bundled_paths = {{ binary.bundled_paths }}
 {% endif %}
 {% endfor %}
-
-{% if has_installed_docs %}
-[installed_docs]
-source_root = {{ installed_docs.source_root }}
-install_root = {{ installed_docs.install_root }}
-entrypoint = {{ installed_docs.entrypoint }}
-{% endif %}
 
 {% for package in python_packages %}
 [[python_packages]]

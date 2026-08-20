@@ -8,6 +8,10 @@ from pathlib import Path, PurePosixPath
 
 CHANNEL_CONTRACTS_FILE = "publish-channel-contracts.toml"
 ROOT_CHANNELS = frozenset({"crates_io", "github_release"})
+SUPPORTED_SCHEMA_VERSION = 1
+# Single source for the release Rust toolchain when the manifest does not
+# declare [project].rust_toolchain; workflows read it via `build-plan`.
+DEFAULT_RUST_TOOLCHAIN = "1.94.1"
 
 
 def _require_keys(entry: dict, required: tuple[str, ...], label: str) -> None:
@@ -39,6 +43,9 @@ def load_channel_contracts(path: Path) -> dict[str, dict]:
 
 def load_manifest(path: Path, *, with_channel_contracts: bool = False) -> dict:
     data = tomllib.loads(path.read_text(encoding="utf-8"))
+    schema_version = data.get("schema_version", SUPPORTED_SCHEMA_VERSION)
+    if schema_version != SUPPORTED_SCHEMA_VERSION:
+        raise SystemExit(f"unsupported manifest schema_version: {schema_version!r}")
     # An empty crates list is valid: pure-Python consumers publish no Rust
     # crates, and every Cargo step gates on the manifest's crates.
     crates = data.get("crates", [])
@@ -67,6 +74,14 @@ def manifest_workspace_toml(manifest: dict) -> str:
     value = manifest["project"].get("workspace_toml", "Cargo.toml")
     if not isinstance(value, str) or not value:
         raise SystemExit("[project].workspace_toml must be a non-empty string")
+    return value
+
+
+def manifest_rust_toolchain(manifest: dict) -> str:
+    """Return the manifest-declared release Rust toolchain."""
+    value = manifest["project"].get("rust_toolchain", DEFAULT_RUST_TOOLCHAIN)
+    if not isinstance(value, str) or not value:
+        raise SystemExit("[project].rust_toolchain must be a non-empty string")
     return value
 
 

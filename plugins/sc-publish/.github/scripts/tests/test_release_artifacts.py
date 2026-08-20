@@ -479,6 +479,165 @@ def test_github_release_leg_is_detect_and_skip(tmp_path: Path) -> None:
     ]
 
 
+def test_no_single_repo_concerns_leak_into_kit_workflows_actions_or_scripts() -> None:
+    """Extend the anti-leakage guard to every vendored workflow, action, and script."""
+    forbidden = ("sc-compose", "sc_compose", "randlee")
+    allowlist = {
+        # Deliberate shared ecosystem pin: setup-sc-lint's default repository.
+        "actions/setup-sc-lint/action.yml": {"randlee"},
+        # The pinned renderer wheel is the sc-compose PyPI package by design.
+        "scripts/bootstrap_sc_compose.py": {"sc-compose", "sc_compose"},
+    }
+    kit_workflows = (
+        "release.yml",
+        "release-preflight.yml",
+        "crates-publish.yml",
+        "pypi-publish.yml",
+        "homebrew-publish.yml",
+        "scoop-publish.yml",
+        "winget-publish.yml",
+    )
+    kit_actions = (
+        "extract-published-renderer",
+        "setup-lint-toolchain",
+        "setup-python-release-build",
+        "setup-sc-lint",
+        "verify-published-release",
+    )
+    kit_scripts = (
+        "bootstrap_sc_compose.py",
+        "release_artifacts.py",
+        "release_manifest.py",
+        "release_gate.sh",
+    )
+    github_root = repo_root() / ".github"
+    files = [
+        *(github_root / "workflows" / name for name in kit_workflows),
+        *(github_root / "actions" / name / "action.yml" for name in kit_actions),
+        *(github_root / "scripts" / name for name in kit_scripts),
+    ]
+    if (repo_root() / ".sc-publish-source-root").is_file():
+        # In the kit source the inventory above must be complete, so new files
+        # cannot dodge the guard. Consumers may add their own workflows.
+        assert sorted(path.name for path in (github_root / "workflows").glob("*.yml")) == sorted(kit_workflows)
+        assert sorted(path.parent.name for path in (github_root / "actions").rglob("action.yml")) == sorted(kit_actions)
+        assert sorted(
+            path.name
+            for path in (github_root / "scripts").iterdir()
+            if path.suffix in (".py", ".sh")
+        ) == sorted(kit_scripts)
+    for path in files:
+        relative = path.relative_to(github_root).as_posix()
+        if path.name == "action.yml":
+            relative = f"actions/{path.parent.name}/action.yml"
+        text = path.read_text(encoding="utf-8")
+        for needle in forbidden:
+            if needle in allowlist.get(relative, set()):
+                continue
+            assert needle not in text, f"{relative} leaks single-repo concern {needle!r}"
+
+
+def test_hygiene_single_sources_pins_paths_and_publish_time_validations(tmp_path: Path) -> None:
+    release_text = release_workflow_text()
+    preflight_text = release_preflight_workflow_text()
+    crates_text = crates_publish_workflow_text()
+    homebrew_text = homebrew_publish_workflow_text()
+    scoop_text = scoop_publish_workflow_text()
+    python_action_text = (
+        repo_root() / ".github" / "actions" / "setup-python-release-build" / "action.yml"
+    ).read_text(encoding="utf-8")
+    sc_lint_action_text = (
+        repo_root() / ".github" / "actions" / "setup-sc-lint" / "action.yml"
+    ).read_text(encoding="utf-8")
+
+    # Item 1: the Rust toolchain pin is single-sourced through build-plan.
+    for text in (release_text, preflight_text, crates_text, python_action_text):
+        assert "1.94.1" not in text
+        assert "rust_toolchain" in text
+
+    # Item 2: the sc-lint repository slug is an input with a documented pin.
+    assert "SC_LINT_REPOSITORY" in sc_lint_action_text
+    assert 'default: "randlee/sc-lint"' in sc_lint_action_text
+    assert "https://github.com/randlee" not in sc_lint_action_text
+
+    # Item 5: release.yml reads the manifest path from its env everywhere.
+    assert release_text.count("release/publish-artifacts.toml") == 1
+
+    # Item 7: tap/bucket pushes fetch-rebase-retry instead of racing.
+    for text in (homebrew_text, scoop_text):
+        assert "git pull --rebase origin" in text
+        assert "for attempt in 1 2 3 4 5; do" in text
+        assert "push rejected (attempt" in text
+
+    # Item 8: the pyproject input is required, not layout-inferred.
+    assert "bindings/python/pyproject.toml" not in python_action_text
+
+    # Item 6: contract-declared GitHub environments are verified by preflight.
+    assert "Verify contract-declared GitHub environments exist" in preflight_text
+    assert ".github_environments[]?" in preflight_text
+    _, manifest = write_repo_fixture(tmp_path, manifest_wheels=["ubuntu-latest"])
+    plan_result = run_fixture_command(tmp_path, "preflight-secret-plan", manifest=manifest)
+    assert plan_result.returncode == 0, plan_result.stderr
+    assert json.loads(plan_result.stdout)["github_environments"] == [
+        "crates-io",
+        "pypi",
+        "testpypi",
+    ]
+
+
+def test_validate_manifest_requires_publish_time_channel_fields(tmp_path: Path) -> None:
+    pypi_dir = tmp_path / "pypi"
+    pypi_dir.mkdir()
+    workspace, manifest = write_repo_fixture(pypi_dir, manifest_wheels=["ubuntu-latest"])
+    manifest.write_text(
+        manifest.read_text(encoding="utf-8").replace(
+            'test_repository = "testpypi"', 'test_repository = ""', 1
+        ),
+        encoding="utf-8",
+    )
+    result = run_fixture_command(
+        pypi_dir,
+        "validate-manifest",
+        "--workspace-toml",
+        str(workspace),
+        manifest=manifest,
+    )
+    assert result.returncode != 0
+    assert "[channels.pypi].test_repository must be a non-empty string" in result.stderr
+
+    winget_dir = tmp_path / "winget"
+    winget_dir.mkdir()
+    workspace, manifest = write_repo_fixture(winget_dir, manifest_wheels=["ubuntu-latest"])
+    manifest.write_text(
+        manifest.read_text(encoding="utf-8").replace(
+            'identifier = "example.fixture"', 'identifier = ""', 1
+        ),
+        encoding="utf-8",
+    )
+    result = run_fixture_command(
+        winget_dir,
+        "validate-manifest",
+        "--workspace-toml",
+        str(workspace),
+        manifest=manifest,
+    )
+    assert result.returncode != 0
+    assert "[channels.winget].identifier must be a non-empty string" in result.stderr
+
+
+def test_load_manifest_rejects_unsupported_schema_version(tmp_path: Path) -> None:
+    _, manifest = write_repo_fixture(tmp_path, manifest_wheels=["ubuntu-latest"])
+    manifest.write_text(
+        manifest.read_text(encoding="utf-8").replace(
+            "schema_version = 1", "schema_version = 2", 1
+        ),
+        encoding="utf-8",
+    )
+    result = run_fixture_command(tmp_path, "build-plan", manifest=manifest)
+    assert result.returncode != 0
+    assert "unsupported manifest schema_version" in result.stderr
+
+
 def test_winget_leg_probes_before_submitting_and_pins_the_releaser() -> None:
     text = winget_publish_workflow_text()
 

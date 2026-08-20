@@ -59,6 +59,7 @@ jobs:
           {
             echo "has_crates=$(jq -r '.has_crates' <<<"${plan}")"
             echo "workspace_toml=$(jq -r '.workspace_toml' <<<"${plan}")"
+            echo "rust_toolchain=$(jq -r '.rust_toolchain' <<<"${plan}")"
           } >> "$GITHUB_OUTPUT"
 
       - id: repository_secrets
@@ -120,6 +121,30 @@ jobs:
           fi
           echo "All manifest-required protected-environment secret names are present."
 
+      - id: github_environments
+        name: Verify contract-declared GitHub environments exist
+        if: ${{ always() && steps.secret_plan.outcome == 'success' }}
+        continue-on-error: true
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          SECRET_PLAN: ${{ steps.secret_plan.outputs.plan }}
+        run: |
+          set -euo pipefail
+          failures=()
+          while IFS= read -r environment_name; do
+            [[ -z "${environment_name}" ]] && continue
+            if ! gh api "repos/${REPOSITORY}/environments/${environment_name}" >/dev/null 2>&1; then
+              failures+=("GitHub Actions environment ${environment_name} is declared by the channel contracts but does not exist.")
+            fi
+          done < <(jq -r '.github_environments[]?' <<<"${SECRET_PLAN}")
+          if [[ "${#failures[@]}" -gt 0 ]]; then
+            printf '%s\n' "${failures[@]}" >&2
+            exit 1
+          fi
+          echo "All contract-declared GitHub environments exist."
+
       - id: credential_liveness
         name: Verify repository credential liveness
         if: ${{ always() && steps.secret_plan.outcome == 'success' }}
@@ -177,7 +202,7 @@ jobs:
         if: ${{ always() && steps.build_plan.outputs.has_crates == 'true' }}
         uses: dtolnay/rust-toolchain@master
         with:
-          toolchain: 1.94.1
+          toolchain: ${{ steps.build_plan.outputs.rust_toolchain }}
           components: rustfmt, clippy
 
       - name: Normalize version input
@@ -389,6 +414,7 @@ jobs:
           HAS_CRATES: ${{ steps.build_plan.outputs.has_crates }}
           REPOSITORY_SECRETS: ${{ steps.repository_secrets.outcome }}
           ENVIRONMENT_SECRETS: ${{ steps.environment_secrets.outcome }}
+          GITHUB_ENVIRONMENTS: ${{ steps.github_environments.outcome }}
           CREDENTIAL_LIVENESS: ${{ steps.credential_liveness.outcome }}
           REGISTRY_STATE: ${{ steps.registry_state.outcome }}
           META: ${{ steps.meta.outcome }}
@@ -421,6 +447,7 @@ jobs:
           record build-plan "${BUILD_PLAN}"
           record repository-secrets "${REPOSITORY_SECRETS}"
           record environment-secrets "${ENVIRONMENT_SECRETS}"
+          record github-environments "${GITHUB_ENVIRONMENTS}"
           record credential-liveness "${CREDENTIAL_LIVENESS}"
           record registry-state "${REGISTRY_STATE}"
           record version-input "${META}"

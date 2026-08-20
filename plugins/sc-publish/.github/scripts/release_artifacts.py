@@ -31,6 +31,7 @@ from release_manifest import (
     _require_project,
     load_channel_contracts,
     load_manifest,
+    manifest_rust_toolchain,
     manifest_workspace_toml,
     registry_version_state,
     package_name,
@@ -319,6 +320,15 @@ def cmd_validate_manifest(args: argparse.Namespace) -> int:
         _channel_asset_patterns(manifest, channel_name)
         if channel_name in ("homebrew", "scoop"):
             _renderer_archive_path(manifest)
+        # Values only read at publish time must still fail validation early.
+        required_channel_strings = {
+            "pypi": ("test_repository", "production_repository"),
+            "winget": ("identifier",),
+        }.get(channel_name, ())
+        channel = _channel_config(manifest, channel_name)
+        for key in required_channel_strings:
+            if not isinstance(channel.get(key), str) or not channel[key]:
+                raise SystemExit(f"[channels.{channel_name}].{key} must be a non-empty string")
     if "homebrew" in channel_names:
         _validate_homebrew_bundle_destinations(binaries)
         _validate_homebrew_formulas(
@@ -455,6 +465,7 @@ def cmd_build_plan(args: argparse.Namespace) -> int:
         "has_python_wheels": any(entry["wheels"] for entry in entries),
         "has_python_sdists": any(entry["sdist"] for entry in entries),
         "workspace_toml": manifest_workspace_toml(manifest),
+        "rust_toolchain": manifest_rust_toolchain(manifest),
     }
     print(json.dumps(plan, separators=(",", ":")))
     return 0
@@ -578,12 +589,25 @@ def cmd_preflight_secret_plan(args: argparse.Namespace) -> int:
         )
         post_release_channels.append({"name": channel_name, **channel_preflight})
 
+    # Workflow-consumed GitHub environments are contract-declared so the
+    # preflight can verify they exist before any release dispatch.
+    github_environments: list[str] = []
+    contracts = manifest["channel_contracts"]
+    for contract_name in ("crates_io", "github_release", *channel_names):
+        for environment in contracts.get(contract_name, {}).get("environments", []):
+            if environment not in github_environments:
+                github_environments.append(environment)
+    for secret in environment_secrets:
+        if secret["environment"] not in github_environments:
+            github_environments.append(secret["environment"])
+
     print(
         json.dumps(
             {
                 "repository_secrets": repository_secrets,
                 "repository_secret_channels": repository_secret_channels,
                 "environment_secrets": environment_secrets,
+                "github_environments": github_environments,
                 "liveness_checks": liveness_checks,
                 "liveness_channel_checks": liveness_channel_checks,
                 "root_channels": root_channels,

@@ -14,12 +14,14 @@ inputs:
     default: "3.11"
   pyproject:
     description: Python package manifest whose version must match the workspace release.
-    required: false
-    default: "bindings/python/pyproject.toml"
+    required: true
   build_system:
     description: Declared build system for this distribution (maturin or setuptools).
     required: false
     default: "maturin"
+  rust_toolchain:
+    description: Rust toolchain used for maturin builds (from the manifest build plan).
+    required: true
 
 runs:
   using: composite
@@ -33,7 +35,7 @@ runs:
     - uses: dtolnay/rust-toolchain@master
       if: ${{ inputs.build_system == 'maturin' }}
       with:
-        toolchain: 1.94.1
+        toolchain: ${{ inputs.rust_toolchain }}
     - name: Install maturin
       if: ${{ inputs.build_system == 'maturin' }}
       shell: bash

@@ -44,10 +44,18 @@ jobs:
         with:
           ref: ${{ inputs.tag }}
 
+      - name: Read build plan from release manifest
+        id: build_plan
+        shell: bash
+        run: |
+          set -euo pipefail
+          plan="$(python3 .github/scripts/release_artifacts.py build-plan --manifest "${RELEASE_ARTIFACT_MANIFEST}")"
+          echo "rust_toolchain=$(jq -r '.rust_toolchain' <<<"${plan}")" >> "$GITHUB_OUTPUT"
+
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@master
         with:
-          toolchain: 1.94.1
+          toolchain: ${{ steps.build_plan.outputs.rust_toolchain }}
 
       - name: Set up Python
         uses: actions/setup-python@v5

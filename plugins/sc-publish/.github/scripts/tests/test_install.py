@@ -43,23 +43,17 @@ class InstallValuesTests(unittest.TestCase):
                     "artifact": "example-core",
                     "package": "example-core",
                     "cargo_toml": "crates/example-core/Cargo.toml",
-                    "required": True,
                     "publish": True,
                     "publish_order": 1,
-                    "preflight_check": "locked",
                     "wait_after_publish_seconds": 0,
-                    "verify_install": False,
                 },
                 {
                     "artifact": "example-python",
                     "package": "example-python",
                     "cargo_toml": "crates/example-python/Cargo.toml",
-                    "required": True,
                     "publish": False,
                     "publish_order": 0,
-                    "preflight_check": "locked",
                     "wait_after_publish_seconds": 0,
-                    "verify_install": True,
                 },
             ],
             "release_binaries": [
@@ -74,11 +68,6 @@ class InstallValuesTests(unittest.TestCase):
                     ],
                 }
             ],
-            "installed_docs": {
-                "source_root": "docs",
-                "install_root": "share/doc/example",
-                "entrypoint": "share/doc/example/README.md",
-            },
             "python_packages": [
                 {
                     "artifact": "example-wheel",

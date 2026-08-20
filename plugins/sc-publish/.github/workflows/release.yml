@@ -135,7 +135,7 @@ jobs:
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@master
         with:
-          toolchain: 1.94.1
+          toolchain: ${{ needs.release-plan.outputs.rust_toolchain }}
           targets: ${{ matrix.target }}
 
       - name: Ensure cross-compilation target
@@ -234,7 +234,7 @@ jobs:
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@master
         with:
-          toolchain: 1.94.1
+          toolchain: ${{ needs.release-plan.outputs.rust_toolchain }}
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -298,6 +298,7 @@ jobs:
       has_crates: ${{ steps.manifest.outputs.has_crates }}
       has_python_wheels: ${{ steps.manifest.outputs.has_python_wheels }}
       has_python_sdists: ${{ steps.manifest.outputs.has_python_sdists }}
+      rust_toolchain: ${{ steps.manifest.outputs.rust_toolchain }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -307,14 +308,15 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          echo "release_target_matrix=$(python3 .github/scripts/release_artifacts.py release-target-matrix --manifest release/publish-artifacts.toml)" >> "$GITHUB_OUTPUT"
-          echo "python_wheel_matrix=$(python3 .github/scripts/release_artifacts.py python-wheel-matrix --manifest release/publish-artifacts.toml)" >> "$GITHUB_OUTPUT"
-          echo "python_sdist_matrix=$(python3 .github/scripts/release_artifacts.py python-sdist-matrix --manifest release/publish-artifacts.toml)" >> "$GITHUB_OUTPUT"
-          plan="$(python3 .github/scripts/release_artifacts.py build-plan --manifest release/publish-artifacts.toml)"
+          echo "release_target_matrix=$(python3 .github/scripts/release_artifacts.py release-target-matrix --manifest "${RELEASE_ARTIFACT_MANIFEST}")" >> "$GITHUB_OUTPUT"
+          echo "python_wheel_matrix=$(python3 .github/scripts/release_artifacts.py python-wheel-matrix --manifest "${RELEASE_ARTIFACT_MANIFEST}")" >> "$GITHUB_OUTPUT"
+          echo "python_sdist_matrix=$(python3 .github/scripts/release_artifacts.py python-sdist-matrix --manifest "${RELEASE_ARTIFACT_MANIFEST}")" >> "$GITHUB_OUTPUT"
+          plan="$(python3 .github/scripts/release_artifacts.py build-plan --manifest "${RELEASE_ARTIFACT_MANIFEST}")"
           {
             echo "has_crates=$(jq -r '.has_crates' <<<"${plan}")"
             echo "has_python_wheels=$(jq -r '.has_python_wheels' <<<"${plan}")"
             echo "has_python_sdists=$(jq -r '.has_python_sdists' <<<"${plan}")"
+            echo "rust_toolchain=$(jq -r '.rust_toolchain' <<<"${plan}")"
           } >> "$GITHUB_OUTPUT"
 
   build-python-wheels:
@@ -334,6 +336,7 @@ jobs:
           release_version: ${{ needs.gate-and-tag.outputs.release_version }}
           pyproject: ${{ matrix.pyproject }}
           build_system: ${{ matrix.build_system }}
+          rust_toolchain: ${{ needs.release-plan.outputs.rust_toolchain }}
       - name: Build wheels (maturin)
         if: ${{ matrix.build_system == 'maturin' }}
         run: maturin build --release --manifest-path ${{ matrix.cargo_manifest }} --out dist
@@ -364,6 +367,7 @@ jobs:
           release_version: ${{ needs.gate-and-tag.outputs.release_version }}
           pyproject: ${{ matrix.pyproject }}
           build_system: ${{ matrix.build_system }}
+          rust_toolchain: ${{ needs.release-plan.outputs.rust_toolchain }}
       - name: Build sdist (maturin)
         if: ${{ matrix.build_system == 'maturin' }}
         run: maturin sdist --manifest-path ${{ matrix.cargo_manifest }} --out dist
@@ -413,7 +417,7 @@ jobs:
         run: |
           set -euo pipefail
           python3 .github/scripts/release_artifacts.py verify-python-release-assets \
-            --manifest release/publish-artifacts.toml \
+            --manifest "${RELEASE_ARTIFACT_MANIFEST}" \
             --asset-dir dist
       - name: Publish wheels and sdist to TestPyPI
         env:
