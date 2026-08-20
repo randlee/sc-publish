@@ -250,6 +250,22 @@ class InstallValuesTests(unittest.TestCase):
             self.assertTrue(artifacts.is_file())
             self.assertTrue(gate.is_file())
 
+            # The kit README installs under a kit-owned name and never
+            # overwrites the consumer repository's own README.md.
+            kit_readme = consumer / "README.sc-publish.md"
+            self.assertTrue(kit_readme.is_file())
+            self.assertFalse((consumer / "README.md").exists())
+            self.assertEqual(
+                kit_readme.read_bytes(), (INSTALLER.parent / "README.md").read_bytes()
+            )
+            readme_text = kit_readme.read_text(encoding="utf-8")
+            self.assertIn("byte-for-byte", readme_text)
+            self.assertIn("bootstrap_sc_compose.py --venv", readme_text)
+            self.assertIn("--dry-run --input", readme_text)
+            self.assertIn(".claude/agents/publisher.md", readme_text)
+            self.assertIn(".cursor/", readme_text)
+            self.assertIn("idempotent", readme_text)
+
             workflows = (
                 "release.yml",
                 "release-preflight.yml",

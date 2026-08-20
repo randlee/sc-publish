@@ -28,6 +28,12 @@ TEMPLATES = {
 
 CHANNEL_NAMES = ("pypi", "homebrew", "scoop", "winget")
 
+# Copied byte-for-byte, but installed under a different consumer path so the
+# kit never overwrites a consumer-owned file of the same name.
+RENAMED_FILES = {
+    Path("README.md"): Path("README.sc-publish.md"),
+}
+
 
 def _require_mapping(value: object, label: str) -> dict[str, Any]:
     if not isinstance(value, dict):
@@ -477,7 +483,9 @@ dry-run returns 1 when consumer files would change.""",
 
         changed = False
         for source in package_files():
-            relative = source.relative_to(PACKAGE_ROOT)
+            relative = RENAMED_FILES.get(
+                source.relative_to(PACKAGE_ROOT), source.relative_to(PACKAGE_ROOT)
+            )
             destination = consumer / relative
             if destination.exists() and destination.read_bytes() == source.read_bytes():
                 continue
