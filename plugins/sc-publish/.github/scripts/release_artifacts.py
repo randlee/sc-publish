@@ -5,7 +5,6 @@ import argparse
 import json
 import re
 import shutil
-import subprocess
 import tarfile
 import tomllib
 import zipfile
@@ -33,6 +32,7 @@ from release_manifest import (
     load_channel_contracts,
     load_manifest,
     manifest_workspace_toml,
+    registry_version_state,
     package_name,
     workspace_members,
     workspace_version,
@@ -824,22 +824,15 @@ def cmd_cargo_build_bin_args(args: argparse.Namespace) -> int:
     return 0
 
 
-def cargo_search_version_exists(crate: str, version: str) -> bool:
-    result = subprocess.run(
-        ["cargo", "search", crate, "--limit", "1"],
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        text=True,
-        check=False,
-    )
-    return f'{crate} = "{version}"' in result.stdout
-
-
 def cmd_check_version_unpublished(args: argparse.Namespace) -> int:
-    manifest = load_manifest(Path(args.manifest))
+    """Detect already-published crates via the contract's exact version_lookup_url."""
+    manifest = load_manifest(Path(args.manifest), with_channel_contracts=True)
     published = []
     for crate in manifest["crates"]:
-        if cargo_search_version_exists(crate["package"], args.version):
+        check = _public_registry_checks(
+            manifest["channel_contracts"], "crates_io", crate["package"], args.version
+        )[0]
+        if registry_version_state(check["version_lookup_url"]) == "published":
             published.append(crate["artifact"])
     if published:
         raise SystemExit("release version already published for: " + ", ".join(sorted(published)))

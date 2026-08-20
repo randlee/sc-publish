@@ -479,6 +479,25 @@ def test_github_release_leg_is_detect_and_skip(tmp_path: Path) -> None:
     ]
 
 
+def test_crates_already_published_detection_uses_exact_version_lookup() -> None:
+    release_text = release_workflow_text()
+    crates_text = crates_publish_workflow_text()
+    script_text = (scripts_root() / "release_artifacts.py").read_text(encoding="utf-8")
+    manifest_module_text = (scripts_root() / "release_manifest.py").read_text(encoding="utf-8")
+
+    for text in (release_text, crates_text):
+        assert "cargo search" not in text
+        assert "public-registry-inquiry-plan" in text
+        assert "version_lookup_url" in text
+        assert "publish-channel-contracts.toml" in text
+        assert "indeterminate" in text
+
+    assert "cargo search" not in script_text
+    assert "registry_version_state" in script_text
+    assert "must_be_absent" not in release_text  # policy lives in the contract
+    assert "registry lookup failed" in manifest_module_text
+
+
 def test_release_workflows_gate_cargo_and_python_legs_on_the_manifest() -> None:
     release_text = release_workflow_text()
     preflight_text = release_preflight_workflow_text()

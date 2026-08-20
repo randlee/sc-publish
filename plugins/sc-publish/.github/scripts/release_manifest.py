@@ -449,6 +449,26 @@ def _public_registry_checks(
     return checks
 
 
+def registry_version_state(url: str, timeout: int = 20) -> str:
+    """Resolve an exact version_lookup_url to published/absent; fail closed otherwise."""
+    import urllib.error
+    import urllib.request
+
+    request = urllib.request.Request(url, headers={"User-Agent": "sc-publish-kit"})
+    try:
+        with urllib.request.urlopen(request, timeout=timeout) as response:
+            status = response.status
+    except urllib.error.HTTPError as error:
+        status = error.code
+    except (urllib.error.URLError, TimeoutError) as error:
+        raise SystemExit(f"registry lookup failed for {url}: {error}") from error
+    if status == 200:
+        return "published"
+    if status == 404:
+        return "absent"
+    raise SystemExit(f"registry state for {url} is indeterminate (status {status})")
+
+
 def _channel_contract(manifest: dict, channel_name: str) -> dict:
     try:
         contract = manifest["channel_contracts"][channel_name]

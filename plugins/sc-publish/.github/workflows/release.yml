@@ -248,11 +248,27 @@ jobs:
         run: |
           set -euo pipefail
           version='${{ needs.gate-and-tag.outputs.release_version }}'
+          contracts="$(dirname "${RELEASE_ARTIFACT_MANIFEST}")/publish-channel-contracts.toml"
 
+          # Exact, contract-derived already-published lookup (200/404 state
+          # machine); fuzzy registry text search is index-lagged and ranked.
           crate_exists() {
             local crate="$1"
             local version="$2"
-            cargo search "$crate" --limit 1 | grep -F "${crate} = \"${version}\"" >/dev/null
+            local url status
+            url="$(python3 .github/scripts/release_artifacts.py public-registry-inquiry-plan \
+              --contracts "${contracts}" --channel crates_io --name "${crate}" --version "${version}" \
+              | jq -r '.checks[0].version_lookup_url')"
+            status="$(curl --location --max-time 20 --silent --show-error --output /dev/null \
+              --write-out '%{http_code}' --user-agent 'sc-publish-kit' "${url}" || true)"
+            case "${status}" in
+              200) return 0 ;;
+              404) return 1 ;;
+              *)
+                echo "crates.io state for ${crate}@${version} is indeterminate (status ${status})" >&2
+                exit 1
+                ;;
+            esac
           }
 
           publish_if_missing() {
