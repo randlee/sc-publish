@@ -214,3 +214,116 @@ def test_release_probe_rejects_invalid_tags_before_any_lookup(tmp_path: Path) ->
     assert result.returncode != 0
     assert "Invalid tag" in result.stderr
     assert not outputs
+
+
+# --- winget-pkgs pre-submission probe (winget-publish.yml, issue #41) -------
+
+
+WINGET_GH_STUB = """
+args="$*"
+case "${args}" in
+  *search/issues*)
+    case "${FAKE_GH_SEARCH_MODE:?}" in
+      none)
+        printf '{"total_count": 0, "incomplete_results": false}'
+        exit 0
+        ;;
+      found)
+        printf '{"total_count": 2, "incomplete_results": false}'
+        exit 0
+        ;;
+      incomplete)
+        printf '{"total_count": 0, "incomplete_results": true}'
+        exit 0
+        ;;
+      error)
+        echo "gh: HTTP 503 service unavailable" >&2
+        exit 1
+        ;;
+    esac
+    ;;
+  *winget-pkgs/contents/*)
+    case "${FAKE_GH_CONTENTS_MODE:?}" in
+      found)
+        printf '{"name": "manifest"}'
+        exit 0
+        ;;
+      absent)
+        echo "gh: Not Found (HTTP 404)" >&2
+        exit 1
+        ;;
+      error)
+        echo "gh: The server had an error while processing your request (HTTP 502)" >&2
+        exit 1
+        ;;
+    esac
+    ;;
+esac
+exit 1
+"""
+
+
+def winget_probe_script() -> str:
+    text = (REPO_ROOT / ".github" / "workflows" / "winget-publish.yml").read_text(
+        encoding="utf-8"
+    )
+    return extract_run_block(text, "id: winget_probe")
+
+
+def run_winget_probe(
+    tmp_path: Path, *, contents_mode: str, search_mode: str = "none"
+) -> tuple[subprocess.CompletedProcess[str], dict[str, str]]:
+    return run_probe_script(
+        tmp_path,
+        winget_probe_script(),
+        WINGET_GH_STUB,
+        {
+            "FAKE_GH_CONTENTS_MODE": contents_mode,
+            "FAKE_GH_SEARCH_MODE": search_mode,
+            "IDENTIFIER": "Example.Example",
+            "RELEASE_TAG": "v1.2.3",
+        },
+    )
+
+
+def test_winget_probe_confirmed_absent_proceeds_to_submission(tmp_path: Path) -> None:
+    result, outputs = run_winget_probe(tmp_path, contents_mode="absent", search_mode="none")
+    assert result.returncode == 0, result.stderr
+    assert outputs["already_published"] == "false"
+
+
+def test_winget_probe_skips_when_manifest_or_pr_already_exists(tmp_path: Path) -> None:
+    result, outputs = run_winget_probe(tmp_path, contents_mode="found")
+    assert result.returncode == 0, result.stderr
+    assert outputs["already_published"] == "true"
+    assert "already publishes" in result.stdout
+
+    result, outputs = run_winget_probe(
+        tmp_path, contents_mode="absent", search_mode="found"
+    )
+    assert result.returncode == 0, result.stderr
+    assert outputs["already_published"] == "true"
+    assert "pull request (open or merged) already exists" in result.stdout
+
+
+def test_winget_probe_fails_closed_on_transient_manifest_lookup_error(tmp_path: Path) -> None:
+    result, outputs = run_winget_probe(tmp_path, contents_mode="error")
+    assert result.returncode != 0
+    assert "indeterminate" in result.stderr
+    assert "HTTP 502" in result.stderr
+    assert "already_published" not in outputs
+
+
+def test_winget_probe_fails_closed_on_pr_search_failures(tmp_path: Path) -> None:
+    result, outputs = run_winget_probe(
+        tmp_path, contents_mode="absent", search_mode="error"
+    )
+    assert result.returncode != 0
+    assert "already_published" not in outputs
+
+    result, outputs = run_winget_probe(
+        tmp_path, contents_mode="absent", search_mode="incomplete"
+    )
+    assert result.returncode != 0
+    assert "incomplete results" in result.stderr
+    assert "already_published" not in outputs

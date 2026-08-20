@@ -656,6 +656,11 @@ def test_winget_leg_probes_before_submitting_and_pins_the_releaser() -> None:
     assert "type:pr in:title" in text
     assert "already_published" in text
     assert "if: ${{ steps.winget_probe.outputs.already_published != 'true' }}" in text
+    # Fail closed: only a confirmed 404 may fall through to the PR search,
+    # and incomplete search results must not be read as "no duplicate".
+    assert "grep -Eqi 'HTTP 404|Not Found'" in text
+    assert "is indeterminate (not a confirmed 404); failing closed" in text
+    assert "incomplete_results" in text
     # The third-party releaser must be pinned to an immutable commit SHA.
     assert (
         "uses: vedantmgoyal2009/winget-releaser@4ffc7888bffd451b357355dc214d43bb9f23917e # v2"
