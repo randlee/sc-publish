@@ -64,6 +64,14 @@ class PublishingAssetTests(unittest.TestCase):
             )
             self.assertNotRegex(text, r"(?<!\.github/)scripts/release_gate\.sh", document)
 
+    def test_mandatory_channel_templates_are_packaged(self) -> None:
+        homebrew = PACKAGE_ROOT / "release" / "homebrew" / "formula.rb.j2"
+        scoop = PACKAGE_ROOT / "release" / "scoop" / "manifest.json.j2"
+        self.assertTrue(homebrew.is_file())
+        self.assertTrue(scoop.is_file())
+        self.assertIn("{{ formula_class }}", homebrew.read_text(encoding="utf-8"))
+        self.assertIn("{{ windows_url }}", scoop.read_text(encoding="utf-8"))
+
 
 if __name__ == "__main__":
     unittest.main()

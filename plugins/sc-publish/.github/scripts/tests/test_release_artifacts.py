@@ -251,6 +251,8 @@ def release_manifest() -> dict:
 
 
 def require_manifest_crates() -> dict:
+    if not (repo_root() / "release" / "publish-artifacts.toml").is_file():
+        pytest.skip("package source has no consumer-specific rendered manifest")
     manifest = release_manifest()
     if not manifest.get("crates"):
         pytest.skip("consumer manifest does not publish Rust crates")
