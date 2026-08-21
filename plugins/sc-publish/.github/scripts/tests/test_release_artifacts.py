@@ -2586,12 +2586,13 @@ def test_publish_kit_guidance_is_manifest_driven_and_token_non_disclosing() -> N
         repo_root() / ".claude" / "skills" / "publishing" / "evals" / "channel-name-inquiry.md"
     ).read_text(encoding="utf-8")
 
-    for text in (publisher_text, guide_text, checklist_text):
+    for text in (guide_text, checklist_text):
         assert "channel-dispatch-plan" in text
         assert "PYPI_TOKEN" not in text
         assert "TEST_PYPI_TOKEN" not in text
         assert "sc-compose" not in text
 
+    assert "renderer-contract.md" in publisher_text
     assert "role-specific background workers" in publisher_text
     assert "outcomes are keyed by channel" in (
         repo_root() / "docs" / "publish-kit-requirements.md"

@@ -4,16 +4,15 @@
 from __future__ import annotations
 
 import argparse
-import re
 import subprocess
 import sys
 from pathlib import Path
 
 
-# This is an intentional historical compatibility floor, not a consumer's
-# current workspace version. 1.4.1 is the first published wheel with the
-# renderer features required by publish-kit templates.
-SC_COMPOSE_VERSION = "1.4.1"
+# The one exact renderer version used by every Python invocation in this
+# package. The published wheel provides bindings only; publisher agents use
+# their consumer's CLI and do not import these bindings directly.
+SC_COMPOSE_VERSION = "1.5.0"
 
 
 def python_path(venv: Path) -> Path:
@@ -38,23 +37,43 @@ def installed_version(python: Path) -> str | None:
     return result.stdout.strip() if result.returncode == 0 else None
 
 
-def version_components(value: str) -> tuple[int, ...]:
-    """Return numeric release components for a stable wheel version."""
-    if not re.fullmatch(r"\d+(?:\.\d+)*", value):
+def require_pinned_version(installed: str) -> None:
+    """Fail unless the managed wheel exactly matches the package contract."""
+    if installed != SC_COMPOSE_VERSION:
         raise SystemExit(
-            "cannot verify managed sc-compose wheel version "
-            f"{value!r}; required >= {SC_COMPOSE_VERSION}"
+            "managed environment has incompatible sc-compose wheel: "
+            f"found {installed!r}; required exactly {SC_COMPOSE_VERSION}."
         )
-    return tuple(int(component) for component in value.split("."))
 
 
-def require_version_floor(installed: str) -> None:
-    """Fail before downstream pytest can import a stale renderer binding."""
-    if version_components(installed) < version_components(SC_COMPOSE_VERSION):
+def install_pinned_wheel(python: Path) -> None:
+    """Install the one wheel version the package supports."""
+    subprocess.run(
+        [
+            str(python),
+            "-m",
+            "pip",
+            "install",
+            "--disable-pip-version-check",
+            f"sc-compose=={SC_COMPOSE_VERSION}",
+        ],
+        check=True,
+        stdout=sys.stderr,
+    )
+
+
+def provision_pinned_wheel(python: Path) -> None:
+    """Install or replace a managed wheel until it exactly matches the pin."""
+    existing = installed_version(python)
+    if existing != SC_COMPOSE_VERSION:
+        install_pinned_wheel(python)
+        existing = installed_version(python)
+    if existing is None:
         raise SystemExit(
-            "managed environment has incompatible sc-compose wheel: stale version "
-            f"{installed!r}; required >= {SC_COMPOSE_VERSION}. Use a new --venv path."
+            "managed environment has incompatible sc-compose wheel: "
+            "installation completed but its version could not be determined"
         )
+    require_pinned_version(existing)
 
 
 def main() -> int:
@@ -66,27 +85,7 @@ def main() -> int:
     if not python.is_file():
         subprocess.run([sys.executable, "-m", "venv", str(venv)], check=True)
 
-    existing = installed_version(python)
-    if existing is None:
-        subprocess.run(
-            [
-                str(python),
-                "-m",
-                "pip",
-                "install",
-                "--disable-pip-version-check",
-                f"sc-compose=={SC_COMPOSE_VERSION}",
-            ],
-            check=True,
-            stdout=sys.stderr,
-        )
-        existing = installed_version(python)
-    if existing is None:
-        raise SystemExit(
-            "managed environment has incompatible sc-compose wheel: "
-            "installation completed but its version could not be determined"
-        )
-    require_version_floor(existing)
+    provision_pinned_wheel(python)
     print(python)
     return 0
 
