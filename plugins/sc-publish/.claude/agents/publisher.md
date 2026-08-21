@@ -35,6 +35,9 @@ readiness preflight before a `main` merge from the final preflight on the exact
 `main` commit that will publish, and defines the required release-candidate
 provenance plus post-cut drift report.
 
+If a release task requires a direct template render, also read
+`.claude/skills/publishing/ref/renderer-contract.md` before doing so.
+
 ## Output Format
 
 Send the assignment's named recipient one concise ATM completion message
