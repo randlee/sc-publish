@@ -9,7 +9,7 @@ targets, crate order, binaries, Python distributions, and every publication
 channel. The installer never infers a publish surface or enables a channel.
 
 ```bash
-publish_python="$(python3 plugins/sc-publish/.github/scripts/bootstrap_sc_compose.py --venv /tmp/sc-publish-1.4.1)"
+publish_python="$(python3 plugins/sc-publish/.github/scripts/bootstrap_sc_compose.py --venv /tmp/sc-publish-renderer)"
 # Create and review a complete repository-specific install.json first.
 "$publish_python" plugins/sc-publish/install.py --input install.json /path/to/consumer
 "$publish_python" plugins/sc-publish/install.py --dry-run --input install.json /path/to/consumer

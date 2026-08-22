@@ -18,7 +18,7 @@ jobs:
         id: sc_compose
         shell: bash
         run: |
-          python="$(python3 plugins/sc-publish/.github/scripts/bootstrap_sc_compose.py --venv "${RUNNER_TEMP}/sc-compose-1.4.1")"
+          python="$(python3 plugins/sc-publish/.github/scripts/bootstrap_sc_compose.py --venv "${RUNNER_TEMP}/sc-compose-renderer")"
           echo "SC_COMPOSE_PYTHON=${python}" >> "$GITHUB_ENV"
       - name: Run publish-kit unit tests
         run: |
