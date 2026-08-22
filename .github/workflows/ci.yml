@@ -1,0 +1,53 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [develop, main]
+  push:
+    branches: [develop, main]
+
+jobs:
+  unit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Provision the pinned sc-compose wheel
+        id: sc_compose
+        shell: bash
+        run: |
+          python="$(python3 plugins/sc-publish/.github/scripts/bootstrap_sc_compose.py --venv "${RUNNER_TEMP}/sc-compose-renderer")"
+          echo "SC_COMPOSE_PYTHON=${python}" >> "$GITHUB_ENV"
+      - name: Run publish-kit unit tests
+        run: |
+          "$SC_COMPOSE_PYTHON" -m unittest discover -s plugins/sc-publish/.github/scripts/tests -p 'test_install.py'
+          "$SC_COMPOSE_PYTHON" -m unittest discover -s plugins/sc-publish/.github/scripts/tests -p 'test_publish_kit_*.py'
+      - name: Generate complete vendored-consumer install input
+        run: |
+          "$SC_COMPOSE_PYTHON" -c '
+          import json
+          import os
+          import runpy
+          from pathlib import Path
+
+          values = runpy.run_path(".integration/manifest_examples.py")["complete_values"]()
+          # The installed unit suite is generic: use a library-only consumer
+          # so source-workspace-only release tests correctly skip.
+          values["crates"] = []
+          values["release_binaries"] = []
+          values["python_packages"] = []
+          values["python_distributions"] = []
+          Path(os.environ["RUNNER_TEMP"], "publish-kit-install.json").write_text(json.dumps(values))
+          '
+      - name: Run vendored consumer test suite
+        run: |
+          "$SC_COMPOSE_PYTHON" -m pip install pytest==8.3.5
+          consumer="${RUNNER_TEMP}/publish-kit-consumer"
+          mkdir -p "$consumer"
+          "$SC_COMPOSE_PYTHON" plugins/sc-publish/install.py --input "${RUNNER_TEMP}/publish-kit-install.json" "$consumer"
+          PYTHONPATH="$consumer/.github/scripts" "$SC_COMPOSE_PYTHON" -m pytest "$consumer/.github/scripts/tests/test_release_artifacts.py" -q
+      - name: Run generic manifest integration examples
+        run: |
+          "$SC_COMPOSE_PYTHON" .integration/manifest_examples.py
