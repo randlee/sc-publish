@@ -1,0 +1,17 @@
+# Follow-up cleanup
+
+- Migrate `plugins/sc-publish/.github/scripts/tests/test_release_artifacts.py`
+  from its copied consumer-root assumptions to package-native fixtures. The
+  package-native coverage in `test_install.py` and `test_publish_kit_*.py`
+  runs in CI; this copied consumer suite is deliberately outside that target.
+- Add complete branch and error-path coverage for `install.py`: invalid JSON,
+  missing consumers, Cargo/Python discovery failures, rendered-template
+  failures, dry-run diffs, and successful copy/rerender behavior.
+- Add complete fixture-based coverage for `.github/scripts/release_artifacts.py`
+  and `release_manifest.py`: every CLI subcommand, each manifest validation
+  failure, channel dispatch/retry plans, registry-name checks, and release
+  asset verification.
+- Add behavior tests for `.github/scripts/release_gate.sh`, not only its shell
+  syntax: branch ancestry, exact-ref release gating, and each reject path.
+- Add rendering and negative-input coverage for every `.claude` task template
+  and verify every channel-agent contract against the TOML source.

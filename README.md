@@ -1,25 +1,28 @@
 # sc-publish
 
-Shared, manifest-driven release/publish kit used across repositories. This
-repository is the single source of truth for the package: change shared assets
-here, then vendor them into consumers. Do not make consumer-local edits to
-overlay-owned files and copy them back as an alternate source.
+`sc-publish` is the single source of truth for the shared publishing package.
+The package lives at [`plugins/sc-publish`](plugins/sc-publish).
 
-The canonical, consumer-root overlay is under
-[`docs/publish-kit/overlay`](docs/publish-kit/overlay). Every overlay file is
-shared unchanged between consumers except `release/publish-artifacts.toml`,
-which each consumer supplies for its own crates, wheels, binaries, and enabled
-destinations. A generic starting point is at
-[`docs/publish-kit/examples/release/publish-artifacts.toml`](docs/publish-kit/examples/release/publish-artifacts.toml).
-
-Use [`docs/publish-kit/sync-overlay.sh`](docs/publish-kit/sync-overlay.sh) to
-vendor the overlay into a consumer repository. The consumer manifest is the
-only intentionally repository-specific file and remains consumer-owned:
+Install it into a consumer repository with a complete, caller-owned JSON input
+document. The document declares the entire release surface: project metadata,
+targets, crate order, binaries, Python distributions, and every publication
+channel. The installer never infers a publish surface or enables a channel.
 
 ```bash
-# Review every changed shared file as a unified diff; exits 1 when drift exists.
-docs/publish-kit/sync-overlay.sh --dry-run /path/to/consumer
-
-# Copy only changed overlay files; does not delete consumer-owned files.
-docs/publish-kit/sync-overlay.sh /path/to/consumer
+publish_python="$(python3 plugins/sc-publish/.github/scripts/bootstrap_sc_compose.py --venv /tmp/sc-publish-renderer)"
+# Create and review a complete repository-specific install.json first.
+"$publish_python" plugins/sc-publish/install.py --input install.json /path/to/consumer
+"$publish_python" plugins/sc-publish/install.py --dry-run --input install.json /path/to/consumer
 ```
+
+Use `--dry-run` to print drift without changing the consumer; it returns `1`
+when an install would change files. With no arguments the installer prints
+help. The installer deliberately has no source-discovery mode: release targets,
+Python packaging details, and external publish channels are reviewed policy,
+not values that can be inferred safely from a repository checkout.
+
+The installer copies the shared `.claude`, `.github`, and release assets, then
+uses the pinned `sc-compose` Python bindings to write consumer-specific release manifests.
+The non-CI examples in [`.integration/manifest_examples.py`](.integration/manifest_examples.py)
+render generic inputs and compare parsed TOML values. CI provisions the pinned
+`sc-compose` wheel before running them.
