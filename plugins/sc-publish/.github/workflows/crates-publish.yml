@@ -26,9 +26,10 @@ jobs:
   verify-release:
     runs-on: ubuntu-latest
     steps:
+      # Local actions/scripts always come from the trusted workflow ref (the
+      # commit that dispatched this run); a tag older than this kit's
+      # installation has no .github/actions of its own to run.
       - uses: actions/checkout@v4
-        with:
-          ref: ${{ inputs.tag }}
       - uses: ./.github/actions/verify-published-release
         with:
           release_tag: ${{ inputs.tag }}
@@ -38,11 +39,18 @@ jobs:
     runs-on: ubuntu-latest
     environment: crates-io
     env:
-      RELEASE_ARTIFACT_MANIFEST: release/publish-artifacts.toml
+      RELEASE_ARTIFACT_MANIFEST: release-source/release/publish-artifacts.toml
     steps:
-      - uses: actions/checkout@v4
+      # Two checkouts, deliberately: local scripts always come from the
+      # trusted workflow ref, while `cargo publish` must publish the
+      # immutable tagged source, so it runs against release-source.
+      - name: Checkout workflow support
+        uses: actions/checkout@v4
+      - name: Checkout immutable release source
+        uses: actions/checkout@v4
         with:
           ref: ${{ inputs.tag }}
+          path: release-source
 
       - name: Read build plan from release manifest
         id: build_plan
@@ -51,6 +59,7 @@ jobs:
           set -euo pipefail
           plan="$(python3 .github/scripts/release_artifacts.py build-plan --manifest "${RELEASE_ARTIFACT_MANIFEST}")"
           echo "rust_toolchain=$(jq -r '.rust_toolchain' <<<"${plan}")" >> "$GITHUB_OUTPUT"
+          echo "workspace_toml=$(jq -r '.workspace_toml' <<<"${plan}")" >> "$GITHUB_OUTPUT"
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@master
@@ -66,6 +75,7 @@ jobs:
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
           RELEASE_TAG: ${{ inputs.tag }}
+          WORKSPACE_TOML: release-source/${{ steps.build_plan.outputs.workspace_toml }}
         shell: bash
         run: |
           set -euo pipefail
@@ -99,7 +109,8 @@ jobs:
               echo "${crate} ${version} already published; skipping"
               return 0
             fi
-            cargo publish -p "$crate" --locked
+            # Publish the immutable tagged source, not the workflow ref.
+            cargo publish -p "$crate" --locked --manifest-path "${WORKSPACE_TOML}"
             if [[ "$wait_seconds" != "0" ]]; then
               sleep "$wait_seconds"
             fi

@@ -26,15 +26,24 @@ jobs:
       asset_patterns: ${{ steps.config.outputs.asset_patterns }}
       release_version: ${{ steps.meta.outputs.release_version }}
     steps:
-      - uses: actions/checkout@v4
+      # Two checkouts, deliberately: local actions/scripts always come from
+      # the trusted workflow ref (the commit that dispatched this run),
+      # while the release manifest is read from the immutable release tag. A
+      # tag older than this kit's installation has no .github/actions or
+      # .github/scripts of its own to run.
+      - name: Checkout workflow support
+        uses: actions/checkout@v4
+      - name: Checkout immutable release source
+        uses: actions/checkout@v4
         with:
           ref: ${{ inputs.tag }}
+          path: release-source
       - id: config
         name: Read Homebrew configuration from release manifest
         shell: bash
         run: |
           set -euo pipefail
-          config="$(python3 .github/scripts/release_artifacts.py channel-config --manifest release/publish-artifacts.toml --channel homebrew --tag "${{ inputs.tag }}")"
+          config="$(python3 .github/scripts/release_artifacts.py channel-config --manifest release-source/release/publish-artifacts.toml --channel homebrew --tag "${{ inputs.tag }}")"
           echo "channel_config=${config}" >> "$GITHUB_OUTPUT"
           {
             echo 'asset_patterns<<EOF'

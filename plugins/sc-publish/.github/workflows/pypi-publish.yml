@@ -35,9 +35,18 @@ jobs:
       pypi_config: ${{ steps.config.outputs.config }}
       python_upload_tool: ${{ steps.config.outputs.python_upload_tool }}
     steps:
-      - uses: actions/checkout@v4
+      # Two checkouts, deliberately: local actions/scripts always come from
+      # the trusted workflow ref (the commit that dispatched this run), while
+      # the release manifest is read from the immutable release tag. A tag
+      # older than this kit's installation has no .github/actions or
+      # .github/scripts of its own to run.
+      - name: Checkout workflow support
+        uses: actions/checkout@v4
+      - name: Checkout immutable release source
+        uses: actions/checkout@v4
         with:
           ref: ${{ inputs.tag }}
+          path: release-source
       - uses: ./.github/actions/verify-published-release
         with:
           release_tag: ${{ inputs.tag }}
@@ -46,10 +55,10 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          echo "config=$(python3 .github/scripts/release_artifacts.py channel-config --manifest release/publish-artifacts.toml --channel pypi)" >> "$GITHUB_OUTPUT"
+          echo "config=$(python3 .github/scripts/release_artifacts.py channel-config --manifest release-source/release/publish-artifacts.toml --channel pypi)" >> "$GITHUB_OUTPUT"
           # The manifest's declared build systems select the uploader:
           # maturin when any distribution is maturin-built, twine otherwise.
-          plan="$(python3 .github/scripts/release_artifacts.py build-plan --manifest release/publish-artifacts.toml)"
+          plan="$(python3 .github/scripts/release_artifacts.py build-plan --manifest release-source/release/publish-artifacts.toml)"
           echo "python_upload_tool=$(jq -r '.python_upload_tool' <<<"${plan}")" >> "$GITHUB_OUTPUT"
 
   publish:
@@ -57,9 +66,13 @@ jobs:
     runs-on: ubuntu-latest
     environment: ${{ inputs.target == 'production' && 'pypi' || 'testpypi' }}
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout workflow support
+        uses: actions/checkout@v4
+      - name: Checkout immutable release source
+        uses: actions/checkout@v4
         with:
           ref: ${{ inputs.tag }}
+          path: release-source
       - name: Download Python assets from the published GitHub Release
         shell: bash
         env:
@@ -76,7 +89,7 @@ jobs:
         run: |
           set -euo pipefail
           python3 .github/scripts/release_artifacts.py verify-python-release-assets \
-            --manifest release/publish-artifacts.toml \
+            --manifest release-source/release/publish-artifacts.toml \
             --asset-dir release-assets \
             --copy-to dist
       - name: Select configured Python repository
