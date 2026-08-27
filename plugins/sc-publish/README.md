@@ -73,6 +73,11 @@ Each publish channel — `github_release`, `crates_io`, `pypi`, `homebrew`,
 - Channel identity, standardized secret names, and public registry endpoints
   come from the vendored `release/publish-channel-contracts.toml`; the
   repository-specific destinations come from `release/publish-artifacts.toml`.
+- The post-release workflows check out the release tag's tree for kit
+  actions/scripts and release config, so the tag must have been created
+  **after** the kit was installed in the consumer repository. Re-publishing a
+  pre-kit tag is unsupported; cut a new release from a kit-installed tree
+  instead.
 
 ## Where to look next
 
