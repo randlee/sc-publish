@@ -9,3 +9,6 @@
   the interpreter printed by `bootstrap_sc_compose.py`. That bootstrapper
   installs or replaces the wheel until it exactly matches
   `SC_COMPOSE_VERSION`.
+- Homebrew and Scoop channel workflows bootstrap that same pinned renderer on
+  the runner via `.github/actions/setup-renderer`. They must not extract or
+  execute the consumer product binary as a template renderer.

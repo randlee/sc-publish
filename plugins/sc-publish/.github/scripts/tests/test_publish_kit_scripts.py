@@ -279,6 +279,8 @@ class ReleaseScriptTests(unittest.TestCase):
         self.assertIn("install_pinned_wheel(python)", text)
         self.assertIn("require_pinned_version(existing)", text)
         self.assertIn("managed environment has incompatible sc-compose wheel", text)
+        self.assertIn("--write-cli", text)
+        self.assertIn("write_cli_wrapper", text)
 
     def test_bootstrap_rejects_every_non_pinned_wheel(self) -> None:
         with self.assertRaisesRegex(
@@ -312,6 +314,18 @@ class ReleaseScriptTests(unittest.TestCase):
         ):
             BOOTSTRAP.provision_pinned_wheel(python)
         install.assert_not_called()
+
+    def test_write_cli_wrapper_emits_render_compatible_script(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            venv = Path(temporary)
+            python = venv / "bin" / "python"
+            wrapper = BOOTSTRAP.write_cli_wrapper(venv, python)
+            text = wrapper.read_text(encoding="utf-8")
+            self.assertEqual(wrapper, venv / "bin" / "renderer")
+            self.assertTrue(wrapper.stat().st_mode & 0o111)
+            self.assertIn("sc_compose.ComposeMode.file", text)
+            self.assertIn("--var-file", text)
+            self.assertIn('choices=["render"]', text)
 
     def test_runtime_renderer_paths_use_the_bootstrapped_exact_pin(self) -> None:
         """Guard every package Python-renderer path against independent pins."""
