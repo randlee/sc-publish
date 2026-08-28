@@ -936,6 +936,8 @@ def test_no_single_repo_concerns_leak_into_kit_workflows_actions_or_scripts() ->
         "actions/setup-sc-lint/action.yml": {"randlee"},
         # The pinned renderer wheel is the sc-compose PyPI package by design.
         "scripts/bootstrap_sc_compose.py": {"sc-compose", "sc_compose"},
+        # Composite action invokes the shared bootstrapper by path.
+        "actions/setup-renderer/action.yml": {"sc-compose", "sc_compose"},
     }
     kit_workflows = (
         "release.yml",
@@ -949,8 +951,10 @@ def test_no_single_repo_concerns_leak_into_kit_workflows_actions_or_scripts() ->
     )
     kit_actions = (
         "extract-published-renderer",
+        "install-linux-native-deps",
         "setup-lint-toolchain",
         "setup-python-release-build",
+        "setup-renderer",
         "setup-sc-lint",
         "verify-published-release",
     )
@@ -2419,7 +2423,8 @@ def test_channel_recovery_workflows_require_a_published_release() -> None:
     assert "cargo run --quiet --manifest-path release-source/Cargo.toml" not in scoop_text
     assert "PUBLISHED_RENDERER" in scoop_text
     assert "Checkout workflow support" in scoop_text
-    assert "uses: ./.github/actions/extract-published-renderer" in scoop_text
+    assert "uses: ./.github/actions/setup-renderer" in scoop_text
+    assert "uses: ./.github/actions/extract-published-renderer" not in scoop_text
 
     assert "Render manifest-selected formulas with the published renderer" in homebrew_text
     assert '--tag "${{ inputs.tag }}"' in homebrew_text
@@ -2429,7 +2434,8 @@ def test_channel_recovery_workflows_require_a_published_release() -> None:
     assert ".replace(placeholder, value)" not in homebrew_text
     assert "PUBLISHED_RENDERER" in homebrew_text
     assert "Checkout workflow support" in homebrew_text
-    assert "uses: ./.github/actions/extract-published-renderer" in homebrew_text
+    assert "uses: ./.github/actions/setup-renderer" in homebrew_text
+    assert "uses: ./.github/actions/extract-published-renderer" not in homebrew_text
     assert "install_block" not in homebrew_text
     assert "bundled_paths" in homebrew_text
 
@@ -2437,12 +2443,25 @@ def test_channel_recovery_workflows_require_a_published_release() -> None:
         repo_root()
         / ".github"
         / "actions"
-        / "extract-published-renderer"
+        / "setup-renderer"
         / "action.yml"
     ).read_text(encoding="utf-8")
-    assert "binary-path" in renderer_action
-    assert "Published renderer archive is missing ${RENDERER_BINARY_PATH}" in renderer_action
+    assert "bootstrap_sc_compose.py" in renderer_action
+    assert "--write-cli" in renderer_action
+    assert "PUBLISHED_RENDERER=${renderer}" in renderer_action
     assert "renderer-path=${renderer}" in renderer_action
+
+    linux_deps_action = (
+        repo_root()
+        / ".github"
+        / "actions"
+        / "install-linux-native-deps"
+        / "action.yml"
+    ).read_text(encoding="utf-8")
+    assert "libwebkit2gtk-4.1-dev" in linux_deps_action
+    assert "libwayland-dev" in linux_deps_action
+    for workflow_text in (release_workflow_text(), release_preflight_workflow_text(), crates_publish_workflow_text()):
+        assert "uses: ./.github/actions/install-linux-native-deps" in workflow_text
 
 
 def render_release_template(
