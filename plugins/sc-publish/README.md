@@ -37,6 +37,36 @@ everything else is a shared verbatim copy. Re-running the installer after a
 kit upgrade re-synchronizes the copies; `--dry-run` exits 1 and prints a diff
 whenever a consumer file differs from the kit.
 
+## Pinning, bootstrap, and qualification
+
+Consumers never track a moving sc-publish branch. The org model is one
+blessed, qualified kit revision that every consumer repository adopts
+together:
+
+- **Pin manifest.** Each consumer records the qualified upstream revision in
+  `release/sc-publish-pin.toml` (full 40-character SHA; see the installed
+  `release/sc-publish-pin.toml.example`). The pin is the only statement of
+  which kit a repository runs; a consumer tree that differs from its pin is
+  drift.
+- **Isolated bootstrap.** To install or re-sync, clone the kit **at the
+  pinned revision** into a repository-local, gitignored cache (for example
+  `.sc-publish-kit/`) and run the install contract from that clone. Never
+  run the installer from a shared mutable checkout (such as a sibling
+  `../sc-publish` working tree used by other repositories or agents) — a
+  branch switch there silently changes what every consumer installs.
+- **Consumer input path.** The `--input` JSON path is the consumer's choice —
+  `release/sc-publish-consumer-input.json` and `release/install.json` are
+  both in use across consumers. The filename is not part of the kit
+  contract; only the schema is.
+- **Qualification before a pin advance.** A new kit revision is blessed for
+  the org only after, on at least one real consumer repository: a clean
+  install from the candidate revision, a clean repeat `--dry-run` (exit 0,
+  no drift), a passing kit test suite
+  (`pytest .github/scripts/tests/` with the pinned renderer), a live
+  release-candidate tag cut, and one post-release channel leg retry.
+  Record the evidence in a receipt, then advance every consumer's pin to the
+  blessed SHA together.
+
 ## Runtime profiles
 
 The kit ships two publisher runtime profiles that share the same manifests,
