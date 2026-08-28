@@ -76,9 +76,62 @@ def provision_pinned_wheel(python: Path) -> None:
     require_pinned_version(existing)
 
 
+def renderer_cli_path(venv: Path) -> Path:
+    """Return the platform-specific renderer CLI path in a virtual environment."""
+    directory = "Scripts" if sys.platform == "win32" else "bin"
+    return venv / directory / "renderer"
+
+
+def write_cli_wrapper(venv: Path, python: Path) -> Path:
+    """Write a `sc-compose render` compatible CLI that uses the pinned wheel."""
+    wrapper = renderer_cli_path(venv)
+    wrapper.parent.mkdir(parents=True, exist_ok=True)
+    wrapper.write_text(
+        f"""#!{python}
+import argparse
+import json
+from pathlib import Path
+
+import sc_compose
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description="Pinned sc-compose renderer CLI")
+    parser.add_argument("command", choices=["render"])
+    parser.add_argument("--mode", required=True, choices=["file"])
+    parser.add_argument("--root", required=True)
+    parser.add_argument("--file", required=True)
+    parser.add_argument("--var-file", required=True)
+    parser.add_argument("--output", required=True)
+    args = parser.parse_args()
+    variables = json.loads(Path(args.var_file).read_text(encoding="utf-8"))
+    request = sc_compose.ComposeRequest(
+        root=args.root,
+        mode=sc_compose.ComposeMode.file(args.file),
+        vars_input=variables,
+        policy=sc_compose.ComposePolicy(strict_undeclared_variables=False),
+    )
+    Path(args.output).write_text(sc_compose.compose_file(request).rendered_text, encoding="utf-8")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
+""",
+        encoding="utf-8",
+    )
+    wrapper.chmod(0o755)
+    return wrapper
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--venv", required=True, type=Path, help="managed virtual environment")
+    parser.add_argument(
+        "--write-cli",
+        action="store_true",
+        help="also write a sc-compose render compatible CLI into the venv",
+    )
     args = parser.parse_args()
     venv = args.venv.resolve()
     python = python_path(venv)
@@ -86,6 +139,8 @@ def main() -> int:
         subprocess.run([sys.executable, "-m", "venv", str(venv)], check=True)
 
     provision_pinned_wheel(python)
+    if args.write_cli:
+        write_cli_wrapper(venv, python)
     print(python)
     return 0
 

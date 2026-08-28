@@ -153,6 +153,9 @@ jobs:
       - name: Ensure cross-compilation target
         run: rustup target add ${{ matrix.target }}
 
+      - name: Install Linux native build deps
+        uses: ./.github/actions/install-linux-native-deps
+
       - name: Cache cargo
         uses: actions/cache@v4
         with:
@@ -247,6 +250,9 @@ jobs:
         uses: dtolnay/rust-toolchain@master
         with:
           toolchain: ${{ needs.release-plan.outputs.rust_toolchain }}
+
+      - name: Install Linux native build deps
+        uses: ./.github/actions/install-linux-native-deps
 
       - name: Set up Python
         uses: actions/setup-python@v5
