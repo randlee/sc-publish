@@ -1,0 +1,15 @@
+---
+name: go-native-module
+version: 0.1.0
+description: Render the consumer-specific Go native-module extension config.
+format: toml
+required_variables:
+  - schema_version
+  - source
+  - cargo_package
+  - artifact_prefix
+---
+schema_version = {{ schema_version }}
+source = {{ source }}
+cargo_package = {{ cargo_package }}
+artifact_prefix = {{ artifact_prefix }}
