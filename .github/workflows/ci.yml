@@ -24,6 +24,9 @@ jobs:
         run: |
           "$SC_COMPOSE_PYTHON" -m unittest discover -s plugins/sc-publish/.github/scripts/tests -p 'test_install.py'
           "$SC_COMPOSE_PYTHON" -m unittest discover -s plugins/sc-publish/.github/scripts/tests -p 'test_publish_kit_*.py'
+      - name: Run go-native-module peer-package tests
+        run: |
+          "$SC_COMPOSE_PYTHON" -m unittest discover -s plugins/go-native-module/tests -p 'test_*.py'
       - name: Generate complete vendored-consumer install input
         run: |
           "$SC_COMPOSE_PYTHON" -c '
