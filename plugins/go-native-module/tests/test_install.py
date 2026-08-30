@@ -137,6 +137,27 @@ class InstallerTests(unittest.TestCase):
                     with self.assertRaisesRegex(Exception, expected):
                         MODULE.load_input(self.write_input(root, payload))
 
+    def test_rejects_unparseable_json_without_consumer_output(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            consumer = root / "consumer"
+            consumer.mkdir()
+            input_path = root / "broken.json"
+            input_path.write_text('{"schema_version":', encoding="utf-8")
+            with self.assertRaisesRegex(Exception, "--input must contain JSON"):
+                MODULE.load_input(input_path)
+            result = subprocess.run(
+                [sys.executable, str(ROOT / "install.py"), "--input", str(input_path), str(consumer)],
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+            self.assertNotEqual(result.returncode, 0)
+            self.assertEqual(result.stdout, "")
+            self.assertIn("--input must contain JSON", result.stderr)
+            self.assertFalse((consumer / ".github").exists())
+            self.assertFalse((consumer / "release").exists())
+
     def test_install_rejects_invalid_binding_source(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
