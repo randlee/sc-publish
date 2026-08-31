@@ -2556,13 +2556,19 @@ def test_release_channel_templates_render_to_valid_ruby_and_json(tmp_path: Path)
                 {
                     "destination_components": ["pkgshare"],
                     "source_glob": "share/sc-compose/examples/*",
-                }
+                },
+                {
+                    "destination_components": ["pkgshare", "examples", "nested"],
+                    "source_glob": "share/sc-compose/nested/*",
+                },
             ],
         },
     )
     assert_homebrew_formula_install_executes(formula)
     assert 'bin.install "bin/sc-compose"' in formula
     assert 'bin.install "bin/sc-compose-daemon"' in formula
+    assert '(pkgshare).install Dir["share/sc-compose/examples/*"]' in formula
+    assert '(pkgshare/"examples"/"nested").install Dir["share/sc-compose/nested/*"]' in formula
     assert 'shell_output("#{bin}/" + "sc-compose-daemon"' in formula
 
     scoop = render_release_template(
