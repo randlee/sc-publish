@@ -378,9 +378,24 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          while IFS='|' read -r package _; do
-            cargo package -p "$package" --locked --allow-dirty
-          done < <(python3 .github/scripts/release_artifacts.py list-publish-plan --manifest "${RELEASE_ARTIFACT_MANIFEST}")
+          while IFS='|' read -r package mode earlier_release_dependencies; do
+            case "${mode}" in
+              verify)
+                cargo package -p "$package" --locked --allow-dirty
+                ;;
+              no_verify)
+                printf 'Validating %s without registry verification; waiting for earlier release crate(s): %s\n' \
+                  "$package" "$earlier_release_dependencies"
+                cargo package -p "$package" --locked --allow-dirty --no-verify
+                ;;
+              *)
+                printf 'Unknown package-check mode for %s: %s\n' "$package" "$mode" >&2
+                exit 1
+                ;;
+            esac
+          done < <(python3 .github/scripts/release_artifacts.py package-check-plan \
+            --manifest "${RELEASE_ARTIFACT_MANIFEST}" \
+            --workspace-toml '${{ steps.build_plan.outputs.workspace_toml }}')
 
       - id: github_release_permissions
         name: Verify GitHub Release workflow permissions
