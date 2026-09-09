@@ -1,28 +1,40 @@
 ---
 name: prerelease
-description: Publish or install a manifest-declared GitHub prerelease archive.
+description: List, install, or create manifest-declared GitHub prerelease archives. Use for /prerelease --list, --install, or --create operations.
 ---
 
 # Prerelease
 
-Use `scripts/prerelease.py` from the repository root. This skill is GitHub-only
-and never invokes Homebrew, crates.io, PyPI, winget, or Scoop. Publishing is an
-external state change: use `--authorized` only with written operator approval.
-It refuses protected or dirty branches, tags an explicit version (or delegates
-`--bump` to the manifest tag script), waits for `prerelease-archive.yml`, then
-re-checks every Release asset and checksum before printing the Release URL.
+Operate only on GitHub prerelease archives declared by
+`release/publish-artifacts.toml`. Never publish Homebrew, crates.io, PyPI,
+Winget, Scoop, or another package channel from this skill.
 
-```sh
-python3 .claude/skills/prerelease/scripts/prerelease.py --publish 1.5.11 --dry-run
-python3 .claude/skills/prerelease/scripts/prerelease.py --bump --authorized
-python3 .claude/skills/prerelease/scripts/prerelease.py --install 1.5.11
-python3 .claude/skills/prerelease/scripts/prerelease.py --install --dry-run
+## Step 1 — Verify dependencies
+
+```bash
+which python3 && python3 --version
+python3 -c 'import sys; raise SystemExit("Python 3.11+ is required") if sys.version_info < (3, 11) else None'
+which git && git --version
+which gh && gh --version
+gh auth status
 ```
 
-Install resolves either the requested version or the latest matching GitHub
-prerelease, verifies the host archive checksum, stages it under
-`install_root/vX.Y.Z`, repoints the manifest's platform selector, invokes the
-post-install command, and verifies the selected CLI version. Reinstalling an
-already staged version skips downloading but still repairs selectors and runs
-the post-install and verify commands. `--dry-run` does not call GitHub, git,
-or any installer command.
+If a dependency is absent from `PATH`, check common installation locations as
+described in
+[references/installation-and-troubleshooting.md](references/installation-and-troubleshooting.md).
+Stop if the required command or GitHub authentication is unavailable.
+
+## Route the requested mode
+
+Read and follow exactly one mode file; do not load the other mode procedures.
+
+- `--list`: read [list.md](list.md).
+- `--install [X.Y.Z]`: read [install.md](install.md). Omit the version to
+  select the latest matching prerelease.
+- `--create [X.Y.Z]`: read [create.md](create.md). Omit the version to invoke
+  the manifest-declared patch-version bump and tag command.
+
+Require exactly one mode. Run from the consumer repository root, fail closed
+when `[prerelease]` is absent, and take all repository-specific values from the
+manifest. Do not hardcode project names, tag prefixes, binaries, targets,
+installation paths, selectors, or verification commands.

@@ -307,9 +307,21 @@ class InstallValuesTests(unittest.TestCase):
             self.assertIn(".cursor/", readme_text)
             self.assertIn("idempotent", readme_text)
 
+            claude_skill = consumer / ".claude" / "skills" / "prerelease"
+            codex_skill = consumer / ".codex" / "skills" / "prerelease" / "SKILL.md"
+            self.assertTrue((claude_skill / "SKILL.md").is_file())
+            self.assertTrue(codex_skill.is_file())
+            self.assertIn(
+                "../../../.claude/skills/prerelease/SKILL.md",
+                codex_skill.read_text(encoding="utf-8"),
+            )
+            for mode in ("list.md", "install.md", "create.md"):
+                self.assertTrue((claude_skill / mode).is_file())
+
             workflows = (
                 "release.yml",
                 "release-preflight.yml",
+                "prerelease-archive.yml",
                 "pypi-publish.yml",
                 "homebrew-publish.yml",
                 "scoop-publish.yml",
