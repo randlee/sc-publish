@@ -942,8 +942,9 @@ def test_no_single_repo_concerns_leak_into_kit_workflows_actions_or_scripts() ->
     kit_workflows = (
         "release.yml",
         "release-candidate.yml",
-        "release-preflight.yml",
-        "crates-publish.yml",
+            "release-preflight.yml",
+            "prerelease-archive.yml",
+            "crates-publish.yml",
         "pypi-publish.yml",
         "homebrew-publish.yml",
         "scoop-publish.yml",

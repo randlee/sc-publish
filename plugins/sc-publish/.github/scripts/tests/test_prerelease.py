@@ -1,13 +1,40 @@
 from __future__ import annotations
 
+import hashlib
+import importlib.util
+import io
 import subprocess
 import sys
 import tempfile
 import unittest
+import zipfile
 from pathlib import Path
+from unittest import mock
 
 
 SCRIPT = Path(__file__).resolve().parents[3] / ".claude" / "skills" / "prerelease" / "scripts" / "prerelease.py"
+SPEC = importlib.util.spec_from_file_location("sc_publish_prerelease", SCRIPT)
+assert SPEC is not None and SPEC.loader is not None
+PRERELEASE = importlib.util.module_from_spec(SPEC)
+SPEC.loader.exec_module(PRERELEASE)
+
+
+def manifest(root: Path) -> dict[str, object]:
+    return {
+        "project": {"archive_prefix": "fixture"},
+        "release_targets": [
+            {"target": "x86_64-unknown-linux-gnu", "archive": "tar.gz"},
+        ],
+        "prerelease": {
+            "tag_prefix": "prerelease/v",
+            "tag_script": ".just/prerelease_tag.py",
+            "install_root": str(root / "builds"),
+            "binaries": ["fixture"],
+            "selector_dir": {"darwin": str(root / "darwin"), "linux": str(root / "selector"), "windows": str(root / "windows")},
+            "post_install": "true",
+            "verify": "echo 1.5.11",
+        },
+    }
 
 
 def write_manifest(root: Path) -> None:
@@ -20,8 +47,16 @@ def write_manifest(root: Path) -> None:
         'binaries = ["fixture"]\n'
         'selector_dir = { darwin = "/tmp", linux = "/tmp", windows = "C:\\\\tmp" }\n'
         'post_install = "true"\n'
-        'verify = "echo 1.5.11"\n', encoding="utf-8"
+        'verify = "echo 1.5.11"\n',
+        encoding="utf-8",
     )
+
+
+def fixture_archive() -> bytes:
+    contents = io.BytesIO()
+    with zipfile.ZipFile(contents, "w") as archive:
+        archive.writestr("fixture_1.5.11_x86_64-unknown-linux-gnu/bin/fixture", "fixture")
+    return contents.getvalue()
 
 
 class PrereleaseTests(unittest.TestCase):
@@ -31,7 +66,7 @@ class PrereleaseTests(unittest.TestCase):
             write_manifest(root)
             result = subprocess.run([sys.executable, str(SCRIPT), "--manifest", "release/publish-artifacts.toml", "--publish", "1.5.11", "--dry-run"], cwd=root, text=True, capture_output=True, check=False)
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertIn("would run", result.stdout)
+        self.assertIn("would tag", result.stdout)
 
     def test_publish_refuses_without_written_authorization(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -40,3 +75,67 @@ class PrereleaseTests(unittest.TestCase):
             result = subprocess.run([sys.executable, str(SCRIPT), "--manifest", "release/publish-artifacts.toml", "--publish", "1.5.11"], cwd=root, text=True, capture_output=True, check=False)
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("authorization", result.stderr)
+
+    def test_publish_tags_waits_and_verifies_release_assets(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            values = manifest(root)
+            archive = fixture_archive()
+            name = "fixture_1.5.11_x86_64-unknown-linux-gnu.tar.gz"
+            digest = hashlib.sha256(archive).hexdigest()
+            release = {"url": "https://example.test/release", "assets": [{"name": "checksums.txt"}, {"name": name}]}
+
+            def download(_tag: str, asset: str, destination: Path) -> Path:
+                path = destination / asset
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_bytes(f"{digest}  {name}\n".encode() if asset == "checksums.txt" else archive)
+                return path
+
+            with (
+                mock.patch.object(PRERELEASE, "require_publish_preconditions"),
+                mock.patch.object(PRERELEASE, "command", return_value=subprocess.CompletedProcess([], 0)),
+                mock.patch.object(PRERELEASE, "wait_for_archive") as wait,
+                mock.patch.object(PRERELEASE, "release_for_tag", return_value=release),
+                mock.patch.object(PRERELEASE, "download_asset", side_effect=download),
+            ):
+                tag, url = PRERELEASE.publish(values, "1.5.11", False)
+        self.assertEqual((tag, url), ("prerelease/v1.5.11", "https://example.test/release"))
+        wait.assert_called_once_with("prerelease/v1.5.11")
+
+    def test_install_stages_repoints_and_reuses_a_local_pair(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            values = manifest(root)
+            archive = root / "fixture.zip"
+            archive.write_bytes(fixture_archive())
+            config = values["prerelease"]
+            assert isinstance(config, dict)
+            stage = root / "builds" / "v1.5.11"
+            with (
+                mock.patch.object(PRERELEASE, "select_release", return_value=("1.5.11", {})),
+                mock.patch.object(PRERELEASE, "download_checked_archive", return_value=archive) as download,
+                mock.patch.object(PRERELEASE.platform, "system", return_value="Linux"),
+            ):
+                version, installed = PRERELEASE.install(values, "1.5.11")
+                PRERELEASE.install(values, "1.5.11")
+                self.assertEqual((version, installed), ("1.5.11", stage))
+                self.assertTrue((stage / "bin" / "fixture").is_file())
+                self.assertTrue((root / "selector" / "fixture").is_symlink())
+                download.assert_called_once()
+
+    def test_checksum_verification_fails_closed(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            archive = Path(directory) / "fixture.zip"
+            archive.write_bytes(b"wrong archive")
+            with self.assertRaisesRegex(SystemExit, "sha256 mismatch"):
+                PRERELEASE.verify_checksum(archive, "0" * 64)
+
+    def test_prerelease_workflow_refuses_to_replace_an_existing_release(self) -> None:
+        workflow = (SCRIPT.parents[4] / ".github" / "workflows" / "prerelease-archive.yml").read_text(encoding="utf-8")
+        self.assertIn('gh release view "$tag" >/dev/null 2>&1', workflow)
+        self.assertIn('gh release create "$tag" --prerelease', workflow)
+        self.assertNotIn("gh release upload \"$tag\" --clobber", workflow)
+
+
+if __name__ == "__main__":
+    unittest.main()

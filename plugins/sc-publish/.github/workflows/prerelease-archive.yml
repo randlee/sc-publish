@@ -92,4 +92,8 @@ jobs:
           find assets -type f -exec cp {} . \;
           shasum -a 256 *.tar.gz *.zip > checksums.txt
           tag="${GITHUB_REF_NAME}"
-          gh release create "$tag" --prerelease --title "$tag" --generate-notes *.tar.gz *.zip checksums.txt || gh release upload "$tag" --clobber *.tar.gz *.zip checksums.txt
+          if gh release view "$tag" >/dev/null 2>&1; then
+            echo "refusing to replace an existing prerelease Release: $tag" >&2
+            exit 1
+          fi
+          gh release create "$tag" --prerelease --title "$tag" --generate-notes *.tar.gz *.zip checksums.txt
