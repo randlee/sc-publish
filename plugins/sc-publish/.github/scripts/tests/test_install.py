@@ -261,6 +261,7 @@ class InstallValuesTests(unittest.TestCase):
             "tag_script": ".just/prerelease_tag.py",
             "install_root": "~/.example-builds",
             "binaries": ["example"],
+            "protected_branches": ["trunk", "release"],
             "selector_dir": {
                 "darwin": "/opt/homebrew/bin",
                 "linux": "~/.local/bin",
@@ -347,7 +348,7 @@ class InstallValuesTests(unittest.TestCase):
                 "../../../.claude/skills/prerelease/SKILL.md",
                 codex_skill.read_text(encoding="utf-8"),
             )
-            for mode in ("list.md", "install.md", "create.md"):
+            for mode in ("list.md", "install.md", "publish.md"):
                 self.assertTrue((claude_skill / mode).is_file())
 
             workflows = (

@@ -92,8 +92,9 @@ same non-disclosing credential preflight before any publication.
 Consumers may opt in by declaring `[prerelease]` in
 `release/publish-artifacts.toml`. The installed `prerelease` skill is
 registered under both `.claude/skills/` and `.codex/skills/`, with `--list`,
-`--install`, and `--create` modes. Creation publishes only GitHub prerelease
-archive pairs: it tags an explicitly authorized, clean non-protected branch,
+`--install`, and `--publish` modes (`--create` remains a compatibility alias).
+Publishing creates only GitHub prerelease archive pairs: it tags an explicitly
+authorized, clean non-protected branch,
 waits for `prerelease-archive.yml`, verifies every Release asset and checksum,
 and prints the Release URL. It never publishes to the normal package or
 channel registries. Install resolves a selected or latest matching
