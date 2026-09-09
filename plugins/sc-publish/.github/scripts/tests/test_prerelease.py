@@ -130,6 +130,16 @@ class PrereleaseTests(unittest.TestCase):
             with self.assertRaisesRegex(SystemExit, "sha256 mismatch"):
                 PRERELEASE.verify_checksum(archive, "0" * 64)
 
+    def test_safe_extract_rejects_zip_path_traversal(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            archive = root / "unsafe.zip"
+            with zipfile.ZipFile(archive, "w") as bundle:
+                bundle.writestr("../escaped", "unsafe")
+            with self.assertRaisesRegex(SystemExit, "unsafe path"):
+                PRERELEASE.safe_extract(archive, root / "extract")
+            self.assertFalse((root / "escaped").exists())
+
     def test_prerelease_workflow_refuses_to_replace_an_existing_release(self) -> None:
         workflow = (SCRIPT.parents[4] / ".github" / "workflows" / "prerelease-archive.yml").read_text(encoding="utf-8")
         self.assertIn('gh release view "$tag" >/dev/null 2>&1', workflow)
