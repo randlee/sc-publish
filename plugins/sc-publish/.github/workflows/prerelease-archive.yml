@@ -15,6 +15,8 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.version.outputs.value }}
+      source_sha: ${{ steps.version.outputs.source_sha }}
+      rust_toolchain: ${{ steps.version.outputs.rust_toolchain }}
       matrix: ${{ steps.matrix.outputs.value }}
     steps:
       - uses: actions/checkout@v4
@@ -36,10 +38,13 @@ jobs:
           [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "invalid prerelease version" >&2; exit 1; }
           plan="$(python3 .github/scripts/release_artifacts.py build-plan --manifest "$RELEASE_ARTIFACT_MANIFEST")"
           workspace="$(jq -r .workspace_toml <<<"$plan")"
+          rust_toolchain="$(jq -r .rust_toolchain <<<"$plan")"
           python3 .github/scripts/release_artifacts.py validate-manifest --manifest "$RELEASE_ARTIFACT_MANIFEST" --workspace-toml "$workspace"
           python3 .github/scripts/release_artifacts.py verify-version --manifest "$RELEASE_ARTIFACT_MANIFEST" --workspace-toml "$workspace" --version "$version"
           python3 .github/scripts/release_artifacts.py verify-version-lockstep --manifest "$RELEASE_ARTIFACT_MANIFEST" --workspace-toml "$workspace"
           echo "value=$version" >> "$GITHUB_OUTPUT"
+          echo "source_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          echo "rust_toolchain=$rust_toolchain" >> "$GITHUB_OUTPUT"
       - id: matrix
         run: echo "value=$(python3 .github/scripts/release_artifacts.py release-target-matrix --manifest \"$RELEASE_ARTIFACT_MANIFEST\")" >> "$GITHUB_OUTPUT"
   build:
@@ -50,34 +55,97 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@master
-        with: { targets: ${{ matrix.target }} }
+        with:
+          ref: ${{ needs.plan.outputs.source_sha }}
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ needs.plan.outputs.rust_toolchain }}
+          targets: ${{ matrix.target }}
       - run: rustup target add ${{ matrix.target }}
-      - name: Build and package manifest binaries
+
+      - name: Install Linux native build deps
+        uses: ./.github/actions/install-linux-native-deps
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ matrix.target }}-cargo-prerelease-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Build release binaries
         shell: bash
         run: |
           set -euo pipefail
           bins="$(python3 .github/scripts/release_artifacts.py cargo-build-bin-args --manifest "$RELEASE_ARTIFACT_MANIFEST")"
           cargo build --release --target "${{ matrix.target }}" $bins
-          python3 .github/scripts/release_artifacts.py release-package-config --manifest "$RELEASE_ARTIFACT_MANIFEST" --target "${{ matrix.target }}" > package.json
+
+      - name: Package manifest-declared prerelease archive
+        shell: bash
+        run: |
+          set -euo pipefail
           python3 - <<'PY'
-          import json, shutil, tarfile, zipfile
+          import json
+          import os
           from pathlib import Path
-          config=json.load(open('package.json')); target=config['target']; version='${{ needs.plan.outputs.version }}'; stage=Path(f"{config['project']['archive_prefix']}_{version}_${{ matrix.target }}")
-          (stage/'bin').mkdir(parents=True)
-          for binary in config['binaries']:
-              name=binary['name'] + ('.exe' if 'windows' in '${{ matrix.target }}' else '')
-              shutil.copy2(Path('target')/'${{ matrix.target }}'/'release'/name, stage/'bin'/name)
-          archive=Path(f"{stage}.{target['archive']}")
-          if target['archive']=='tar.gz':
-              with tarfile.open(archive,'w:gz') as out: out.add(stage,arcname=stage.name)
+          import shutil
+          import subprocess
+          import tarfile
+          import zipfile
+
+          target_name = "${{ matrix.target }}"
+          version = "${{ needs.plan.outputs.version }}"
+          config = json.loads(
+              subprocess.check_output(
+                  [
+                      "python3",
+                      ".github/scripts/release_artifacts.py",
+                      "release-package-config",
+                      "--manifest",
+                      os.environ["RELEASE_ARTIFACT_MANIFEST"],
+                      "--target",
+                      target_name,
+                  ],
+                  text=True,
+              )
+          )
+          project = config["project"]
+          target = config["target"]
+          stage = Path(f"{project['archive_prefix']}_{version}_{target_name}")
+          if stage.exists():
+              shutil.rmtree(stage)
+          (stage / "bin").mkdir(parents=True)
+          for binary in config["binaries"]:
+              filename = binary["name"] + (".exe" if "windows" in target_name else "")
+              shutil.copy2(Path("target") / target_name / "release" / filename, stage / "bin" / filename)
+              for bundled_path in binary.get("bundled_paths", []):
+                  source = Path(bundled_path["source"])
+                  destination = stage / bundled_path["destination"]
+                  destination.parent.mkdir(parents=True, exist_ok=True)
+                  shutil.copytree(source, destination, dirs_exist_ok=True)
+          archive = Path(f"{stage}.{target['archive']}")
+          if target["archive"] == "tar.gz":
+              with tarfile.open(archive, "w:gz") as output:
+                  output.add(stage, arcname=stage.name)
+          elif target["archive"] == "zip":
+              with zipfile.ZipFile(archive, "w", zipfile.ZIP_DEFLATED) as output:
+                  for item in stage.rglob("*"):
+                      if item.is_file():
+                          output.write(item, item.relative_to(stage.parent))
           else:
-              with zipfile.ZipFile(archive,'w',zipfile.ZIP_DEFLATED) as out:
-                  for item in stage.rglob('*'):
-                      if item.is_file(): out.write(item,item.relative_to(stage.parent))
+              raise SystemExit(f"unsupported archive type: {target['archive']}")
+          with Path(os.environ["GITHUB_ENV"]).open("a", encoding="utf-8") as env:
+              env.write(f"ARCHIVE={archive}\n")
           PY
-      - uses: actions/upload-artifact@v4
-        with: { name: ${{ matrix.target }}, path: "*.tar.gz\n*.zip" }
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.target }}
+          path: ${{ env.ARCHIVE }}
   release:
     needs: [plan, build]
     runs-on: ubuntu-latest

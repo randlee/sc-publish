@@ -146,6 +146,14 @@ class PrereleaseTests(unittest.TestCase):
         self.assertIn('gh release create "$tag" --prerelease', workflow)
         self.assertNotIn("gh release upload \"$tag\" --clobber", workflow)
 
+    def test_prerelease_workflow_uses_manifest_build_contract(self) -> None:
+        workflow = (SCRIPT.parents[4] / ".github" / "workflows" / "prerelease-archive.yml").read_text(encoding="utf-8")
+        self.assertIn("toolchain: ${{ needs.plan.outputs.rust_toolchain }}", workflow)
+        self.assertIn("uses: ./.github/actions/install-linux-native-deps", workflow)
+        self.assertIn("ref: ${{ needs.plan.outputs.source_sha }}", workflow)
+        self.assertIn('for bundled_path in binary.get("bundled_paths", []):', workflow)
+        self.assertIn("path: ${{ env.ARCHIVE }}", workflow)
+
 
 if __name__ == "__main__":
     unittest.main()
