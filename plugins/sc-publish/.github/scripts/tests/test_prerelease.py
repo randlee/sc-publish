@@ -140,10 +140,16 @@ class PrereleaseTests(unittest.TestCase):
                 PRERELEASE.safe_extract(archive, root / "extract")
             self.assertFalse((root / "escaped").exists())
 
-    def test_prerelease_workflow_refuses_to_replace_an_existing_release(self) -> None:
+    def test_prerelease_workflow_converges_without_clobbering_a_release(self) -> None:
         workflow = (SCRIPT.parents[4] / ".github" / "workflows" / "prerelease-archive.yml").read_text(encoding="utf-8")
-        self.assertIn('gh release view "$tag" >/dev/null 2>&1', workflow)
         self.assertIn('gh release create "$tag" --prerelease', workflow)
+        self.assertIn('gh release view "$tag" --json isDraft,isPrerelease,assets', workflow)
+        self.assertIn('cmp checksums.txt existing-release/checksums.txt', workflow)
+        self.assertIn("concurrent run converged", workflow)
+        self.assertLess(
+            workflow.index('gh release create "$tag" --prerelease'),
+            workflow.index('gh release view "$tag" --json isDraft,isPrerelease,assets'),
+        )
         self.assertNotIn("gh release upload \"$tag\" --clobber", workflow)
 
     def test_prerelease_workflow_uses_manifest_build_contract(self) -> None:
