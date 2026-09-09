@@ -72,6 +72,17 @@ workspace_toml = {{ project.workspace_toml }}
 rust_toolchain = {{ project.rust_toolchain }}
 {% endif %}
 
+{% if has_prerelease %}
+[prerelease]
+tag_prefix = {{ prerelease.tag_prefix }}
+tag_script = {{ prerelease.tag_script }}
+install_root = {{ prerelease.install_root }}
+binaries = {{ prerelease.binaries }}
+selector_dir = {{ prerelease.selector_dir }}
+post_install = {{ prerelease.post_install }}
+verify = {{ prerelease.verify }}
+{% endif %}
+
 {% for target in release_targets %}
 [[release_targets]]
 target = {{ target.target }}

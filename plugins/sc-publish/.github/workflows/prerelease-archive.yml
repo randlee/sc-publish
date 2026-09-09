@@ -1,0 +1,95 @@
+name: Prerelease Archive
+
+on:
+  push:
+    tags: ["prerelease/v*.*.*"]
+
+permissions:
+  contents: write
+
+env:
+  RELEASE_ARTIFACT_MANIFEST: release/publish-artifacts.toml
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.value }}
+      matrix: ${{ steps.matrix.outputs.value }}
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.x" }
+      - id: version
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag="${GITHUB_REF_NAME}"
+          prefix="$(python3 - <<'PY'
+          import tomllib
+          print(tomllib.load(open('release/publish-artifacts.toml','rb'))['prerelease']['tag_prefix'])
+          PY
+          )"
+          [[ "$tag" == "$prefix"* ]] || { echo "unexpected prerelease tag: $tag" >&2; exit 1; }
+          version="${tag#"$prefix"}"
+          [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "invalid prerelease version" >&2; exit 1; }
+          plan="$(python3 .github/scripts/release_artifacts.py build-plan --manifest "$RELEASE_ARTIFACT_MANIFEST")"
+          workspace="$(jq -r .workspace_toml <<<"$plan")"
+          python3 .github/scripts/release_artifacts.py validate-manifest --manifest "$RELEASE_ARTIFACT_MANIFEST" --workspace-toml "$workspace"
+          python3 .github/scripts/release_artifacts.py verify-version --manifest "$RELEASE_ARTIFACT_MANIFEST" --workspace-toml "$workspace" --version "$version"
+          python3 .github/scripts/release_artifacts.py verify-version-lockstep --manifest "$RELEASE_ARTIFACT_MANIFEST" --workspace-toml "$workspace"
+          echo "value=$version" >> "$GITHUB_OUTPUT"
+      - id: matrix
+        run: echo "value=$(python3 .github/scripts/release_artifacts.py release-target-matrix --manifest \"$RELEASE_ARTIFACT_MANIFEST\")" >> "$GITHUB_OUTPUT"
+  build:
+    needs: plan
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with: { targets: ${{ matrix.target }} }
+      - run: rustup target add ${{ matrix.target }}
+      - name: Build and package manifest binaries
+        shell: bash
+        run: |
+          set -euo pipefail
+          bins="$(python3 .github/scripts/release_artifacts.py cargo-build-bin-args --manifest "$RELEASE_ARTIFACT_MANIFEST")"
+          cargo build --release --target "${{ matrix.target }}" $bins
+          python3 .github/scripts/release_artifacts.py release-package-config --manifest "$RELEASE_ARTIFACT_MANIFEST" --target "${{ matrix.target }}" > package.json
+          python3 - <<'PY'
+          import json, shutil, tarfile, zipfile
+          from pathlib import Path
+          config=json.load(open('package.json')); target=config['target']; version='${{ needs.plan.outputs.version }}'; stage=Path(f"{config['project']['archive_prefix']}_{version}_${{ matrix.target }}")
+          (stage/'bin').mkdir(parents=True)
+          for binary in config['binaries']:
+              name=binary['name'] + ('.exe' if 'windows' in '${{ matrix.target }}' else '')
+              shutil.copy2(Path('target')/'${{ matrix.target }}'/'release'/name, stage/'bin'/name)
+          archive=Path(f"{stage}.{target['archive']}")
+          if target['archive']=='tar.gz':
+              with tarfile.open(archive,'w:gz') as out: out.add(stage,arcname=stage.name)
+          else:
+              with zipfile.ZipFile(archive,'w',zipfile.ZIP_DEFLATED) as out:
+                  for item in stage.rglob('*'):
+                      if item.is_file(): out.write(item,item.relative_to(stage.parent))
+          PY
+      - uses: actions/upload-artifact@v4
+        with: { name: ${{ matrix.target }}, path: "*.tar.gz\n*.zip" }
+  release:
+    needs: [plan, build]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with: { path: assets }
+      - name: Generate checksums and publish GitHub prerelease assets
+        env: { GH_TOKEN: ${{ github.token }} }
+        shell: bash
+        run: |
+          set -euo pipefail
+          find assets -type f -exec cp {} . \;
+          shasum -a 256 *.tar.gz *.zip > checksums.txt
+          tag="${GITHUB_REF_NAME}"
+          gh release create "$tag" --prerelease --title "$tag" --generate-notes *.tar.gz *.zip checksums.txt || gh release upload "$tag" --clobber *.tar.gz *.zip checksums.txt
