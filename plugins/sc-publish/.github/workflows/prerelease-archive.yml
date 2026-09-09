@@ -5,7 +5,7 @@ on:
     tags: ["prerelease/v*.*.*"]
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: prerelease-archive-${{ github.ref_name }}
@@ -17,6 +17,7 @@ env:
 jobs:
   plan:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     outputs:
       version: ${{ steps.version.outputs.value }}
       source_sha: ${{ steps.version.outputs.source_sha }}
@@ -57,6 +58,7 @@ jobs:
       fail-fast: false
       matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
         with:
@@ -153,11 +155,15 @@ jobs:
   release:
     needs: [plan, build]
     runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
     steps:
       - uses: actions/download-artifact@v4
         with: { path: assets }
       - name: Generate checksums and publish GitHub prerelease assets
-        env: { GH_TOKEN: ${{ github.token }} }
+        env:
+          GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
           set -euo pipefail

@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import importlib.util
 import io
+import re
 import subprocess
 import sys
 import tempfile
@@ -161,6 +162,10 @@ class PrereleaseTests(unittest.TestCase):
         self.assertIn("ref: ${{ needs.plan.outputs.source_sha }}", workflow)
         self.assertIn('for bundled_path in binary.get("bundled_paths", []):', workflow)
         self.assertIn("path: ${{ env.ARCHIVE }}", workflow)
+        self.assertIn("permissions:\n  contents: read", workflow)
+        self.assertIn("    permissions:\n      contents: write", workflow)
+        self.assertIn("timeout-minutes: 45", workflow)
+        self.assertNotRegex(workflow, r":\s*\{[^\n]*\$\{\{")
 
 
 if __name__ == "__main__":
