@@ -191,6 +191,44 @@ class PrereleaseTests(unittest.TestCase):
         self.assertIn("timeout-minutes: 45", workflow)
         self.assertNotRegex(workflow, r":\s*\{[^\n]*\$\{\{")
 
+    def test_prerelease_packager_matches_release_packager(self) -> None:
+        workflows = SCRIPT.parents[4] / ".github" / "workflows"
+
+        def package_script(path: Path, step_name: str) -> str:
+            workflow = path.read_text(encoding="utf-8")
+            step = workflow.split(f"      - name: {step_name}\n", 1)[1]
+            return step.split("          python3 - <<'PY'\n", 1)[1].split(
+                "\n          PY", 1
+            )[0]
+
+        prerelease = package_script(
+            workflows / "prerelease-archive.yml",
+            "Package manifest-declared prerelease archive",
+        ).replace(
+            'version = "${{ needs.plan.outputs.version }}"',
+            'version = "${VERSION}"',
+        )
+        release = package_script(
+            workflows / "release.yml",
+            "Package manifest-declared release archive",
+        ).replace(
+            'version = "${{ needs.gate-and-tag.outputs.release_version }}"',
+            'version = "${VERSION}"',
+        )
+        # atm-core's release workflow is the canonical packager. It invokes
+        # the helper with the interpreter running the packaging heredoc; the
+        # kit's production release template has not adopted that correction.
+        release = release.replace(
+            "          import shutil\n          import subprocess",
+            "          import shutil\n          import sys\n          import subprocess",
+        ).replace(
+            '                      "python3",\n'
+            '                      ".github/scripts/release_artifacts.py",',
+            '                      sys.executable,\n'
+            '                      ".github/scripts/release_artifacts.py",',
+        )
+        self.assertEqual(prerelease, release)
+
 
 if __name__ == "__main__":
     unittest.main()
