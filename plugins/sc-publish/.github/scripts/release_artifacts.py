@@ -318,11 +318,13 @@ def cmd_validate_manifest(args: argparse.Namespace) -> int:
     if prerelease is not None:
         if not isinstance(prerelease, dict):
             raise SystemExit("[prerelease] must be a table")
-        _require_keys(prerelease, ("tag_prefix", "tag_script", "install_root", "binaries", "selector_dir", "post_install", "verify"), "[prerelease]")
+        _require_keys(prerelease, ("tag_prefix", "tag_script", "install_root", "binaries", "protected_branches", "selector_dir", "post_install", "verify"), "[prerelease]")
         if not all(isinstance(prerelease[key], str) and prerelease[key] for key in ("tag_prefix", "tag_script", "install_root", "post_install", "verify")):
             raise SystemExit("[prerelease] string fields must be non-empty")
         if not isinstance(prerelease["binaries"], list) or not prerelease["binaries"] or not all(isinstance(name, str) and name for name in prerelease["binaries"]):
             raise SystemExit("[prerelease].binaries must be a non-empty string list")
+        if not isinstance(prerelease["protected_branches"], list) or not prerelease["protected_branches"] or not all(isinstance(name, str) and name for name in prerelease["protected_branches"]):
+            raise SystemExit("[prerelease].protected_branches must be a non-empty string list")
         if not isinstance(prerelease["selector_dir"], dict) or set(prerelease["selector_dir"]) != {"darwin", "linux", "windows"} or not all(isinstance(value, str) and value for value in prerelease["selector_dir"].values()):
             raise SystemExit("[prerelease].selector_dir must declare non-empty darwin, linux, and windows paths")
     channel_names = _channel_names(manifest)
@@ -419,8 +421,7 @@ def cmd_validate_manifest(args: argparse.Namespace) -> int:
             raise SystemExit(
                 f"[[python_distributions]] #{index}: Python module path does not exist: {module_root}"
             )
-    # Resolves each distribution's build system; a missing or unsupported
-    # build_system is a manifest validation failure.
+    # A missing or unsupported distribution build_system is a validation failure.
     _python_distribution_entries(manifest)
     print("manifest validation passed")
     return 0
@@ -602,8 +603,7 @@ def cmd_preflight_secret_plan(args: argparse.Namespace) -> int:
         )
         post_release_channels.append({"name": channel_name, **channel_preflight})
 
-    # Workflow-consumed GitHub environments are contract-declared so the
-    # preflight can verify they exist before any release dispatch.
+    # Preflight verifies workflow GitHub environments before release dispatch.
     github_environments: list[str] = []
     contracts = manifest["channel_contracts"]
     for contract_name in ("crates_io", "github_release", *channel_names):

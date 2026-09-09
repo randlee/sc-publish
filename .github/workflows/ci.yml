@@ -20,6 +20,23 @@ jobs:
         run: |
           python="$(python3 plugins/sc-publish/.github/scripts/bootstrap_sc_compose.py --venv "${RUNNER_TEMP}/sc-compose-renderer")"
           echo "SC_COMPOSE_PYTHON=${python}" >> "$GITHUB_ENV"
+      - name: Validate workflow YAML syntax
+        run: |
+          python -m pip install PyYAML==6.0.2
+          python - <<'PY'
+          from pathlib import Path
+
+          import yaml
+
+          paths = sorted(Path(".github/workflows").glob("*.yml"))
+          paths += sorted(Path("plugins/sc-publish/.github/workflows").glob("*.yml"))
+          for path in paths:
+              with path.open(encoding="utf-8") as workflow:
+                  document = yaml.safe_load(workflow)
+              if not isinstance(document, dict):
+                  raise SystemExit(f"{path}: expected a YAML mapping")
+          print(f"parsed {len(paths)} workflow files")
+          PY
       - name: Run publish-kit unit tests
         run: |
           "$SC_COMPOSE_PYTHON" -m unittest discover -s plugins/sc-publish/.github/scripts/tests -p 'test_install.py'
