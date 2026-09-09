@@ -323,8 +323,7 @@ def cmd_validate_manifest(args: argparse.Namespace) -> int:
             raise SystemExit("[prerelease] string fields must be non-empty")
         if not isinstance(prerelease["binaries"], list) or not prerelease["binaries"] or not all(isinstance(name, str) and name for name in prerelease["binaries"]):
             raise SystemExit("[prerelease].binaries must be a non-empty string list")
-        selectors = prerelease["selector_dir"]
-        if not isinstance(selectors, dict) or set(selectors) != {"darwin", "linux", "windows"} or not all(isinstance(value, str) and value for value in selectors.values()):
+        if not isinstance(prerelease["selector_dir"], dict) or set(prerelease["selector_dir"]) != {"darwin", "linux", "windows"} or not all(isinstance(value, str) and value for value in prerelease["selector_dir"].values()):
             raise SystemExit("[prerelease].selector_dir must declare non-empty darwin, linux, and windows paths")
     channel_names = _channel_names(manifest)
     for channel_name in channel_names:
