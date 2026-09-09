@@ -421,8 +421,7 @@ def cmd_validate_manifest(args: argparse.Namespace) -> int:
             raise SystemExit(
                 f"[[python_distributions]] #{index}: Python module path does not exist: {module_root}"
             )
-    # Resolves each distribution's build system; a missing or unsupported
-    # build_system is a manifest validation failure.
+    # A missing or unsupported distribution build_system is a validation failure.
     _python_distribution_entries(manifest)
     print("manifest validation passed")
     return 0
@@ -604,8 +603,7 @@ def cmd_preflight_secret_plan(args: argparse.Namespace) -> int:
         )
         post_release_channels.append({"name": channel_name, **channel_preflight})
 
-    # Workflow-consumed GitHub environments are contract-declared so the
-    # preflight can verify they exist before any release dispatch.
+    # Preflight verifies workflow GitHub environments before release dispatch.
     github_environments: list[str] = []
     contracts = manifest["channel_contracts"]
     for contract_name in ("crates_io", "github_release", *channel_names):
