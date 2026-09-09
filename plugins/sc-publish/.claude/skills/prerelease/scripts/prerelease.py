@@ -9,8 +9,8 @@ import tomllib
 from pathlib import Path
 
 
-def prerelease_manifest() -> dict[str, object]:
-    data = tomllib.loads(Path("release/publish-artifacts.toml").read_text(encoding="utf-8"))
+def prerelease_manifest(path: Path) -> dict[str, object]:
+    data = tomllib.loads(path.read_text(encoding="utf-8"))
     value = data.get("prerelease")
     if not isinstance(value, dict):
         raise SystemExit("[prerelease] is not enabled in release/publish-artifacts.toml")
@@ -28,10 +28,11 @@ def main() -> int:
     mode = parser.add_mutually_exclusive_group(required=True)
     mode.add_argument("--publish", metavar="X.Y.Z")
     mode.add_argument("--install", nargs="?", const="latest", metavar="X.Y.Z")
+    parser.add_argument("--manifest", type=Path, default=Path("release/publish-artifacts.toml"))
     parser.add_argument("--dry-run", action="store_true", help="print the plan without network calls")
     parser.add_argument("--authorized", action="store_true", help="confirm written operator authorization to publish")
     args = parser.parse_args()
-    config = prerelease_manifest()
+    config = prerelease_manifest(args.manifest)
     if args.publish:
         value = parse_version(args.publish)
         tag = f"{config['tag_prefix']}{value}"

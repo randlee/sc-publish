@@ -29,7 +29,7 @@ class PrereleaseTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             write_manifest(root)
-            result = subprocess.run([sys.executable, str(SCRIPT), "--publish", "1.5.11", "--dry-run"], cwd=root, text=True, capture_output=True, check=False)
+            result = subprocess.run([sys.executable, str(SCRIPT), "--manifest", "release/publish-artifacts.toml", "--publish", "1.5.11", "--dry-run"], cwd=root, text=True, capture_output=True, check=False)
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("would run", result.stdout)
 
@@ -37,6 +37,6 @@ class PrereleaseTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             write_manifest(root)
-            result = subprocess.run([sys.executable, str(SCRIPT), "--publish", "1.5.11"], cwd=root, text=True, capture_output=True, check=False)
+            result = subprocess.run([sys.executable, str(SCRIPT), "--manifest", "release/publish-artifacts.toml", "--publish", "1.5.11"], cwd=root, text=True, capture_output=True, check=False)
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("authorization", result.stderr)
