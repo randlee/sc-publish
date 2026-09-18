@@ -801,8 +801,8 @@ def test_package_check_plan_skips_registry_verification_only_for_earlier_release
 
     assert result.returncode == 0, result.stderr
     assert result.stdout.splitlines() == [
-        "sc-composer|verify|",
-        "sc-compose|no_verify|sc-composer",
+        "sc-composer|verify||crates/sc-composer/Cargo.toml",
+        "sc-compose|no_verify|sc-composer|crates/sc-compose/Cargo.toml",
     ]
 
 
@@ -828,8 +828,8 @@ def test_package_check_plan_keeps_full_verification_for_nonrelease_dependencies(
 
     assert result.returncode == 0, result.stderr
     assert result.stdout.splitlines() == [
-        "sc-composer|verify|",
-        "sc-compose|verify|",
+        "sc-composer|verify||crates/sc-composer/Cargo.toml",
+        "sc-compose|verify||crates/sc-compose/Cargo.toml",
     ]
 
 
@@ -3459,3 +3459,34 @@ def test_version_resolution_honors_a_pyproject_workspace_toml(tmp_path: Path) ->
     )
     assert unresolved.returncode != 0
     assert "version source must declare" in unresolved.stderr
+
+
+def test_standalone_crate_manifest_is_validated_and_planned(tmp_path):
+    workspace, manifest = write_repo_fixture(tmp_path, manifest_wheels=["ubuntu-latest"])
+    standalone = tmp_path / "bindings/standalone"
+    standalone.mkdir(parents=True)
+    (standalone / "Cargo.toml").write_text('[package]\nname="standalone"\nversion="1.1.0"\n[workspace]\n[dependencies]\nsc-compose={path="../../crates/sc-compose",version="1.1.0"}\n')
+    with manifest.open("a") as output:
+        output.write('\n[[crates]]\nartifact="standalone"\npackage="standalone"\ncargo_toml="bindings/standalone/Cargo.toml"\npublish=true\npublish_order=3\nwait_after_publish_seconds=0\n')
+    for command in ["validate-manifest", "validate-publish-order", "package-check-plan"]:
+        result = run_fixture_command(tmp_path, command, "--workspace-toml", str(workspace), manifest=manifest)
+        assert result.returncode == 0, result.stderr
+        if command == "package-check-plan":
+            assert "standalone|no_verify|sc-compose|bindings/standalone/Cargo.toml" in result.stdout
+    result = run_fixture_command(tmp_path, "list-publish-plan", manifest=manifest)
+    assert "standalone|0|bindings/standalone/Cargo.toml" in result.stdout
+    from release_manifest import _assert_workspace_inherited_version
+    _assert_workspace_inherited_version(workspace, "bindings/standalone/Cargo.toml")
+    (standalone / "Cargo.toml").write_text('[package]\nname="standalone"\nversion="0.0.1"\n[workspace]\n')
+    with pytest.raises(SystemExit, match="standalone version"):
+        _assert_workspace_inherited_version(workspace, "bindings/standalone/Cargo.toml")
+
+
+def test_all_cargo_publication_and_package_checks_use_manifest_path():
+    for text in [release_workflow_text(), crates_publish_workflow_text()]:
+        assert 'cargo publish --manifest-path "$cargo_manifest" --locked' in text
+        assert 'cargo publish -p' not in text
+        assert 'read -r package wait_secs cargo_manifest' in text
+    text = release_preflight_workflow_text()
+    assert 'cargo package --manifest-path "$cargo_manifest" --locked' in text
+    assert 'cargo package -p' not in text

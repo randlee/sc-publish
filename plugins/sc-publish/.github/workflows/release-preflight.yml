@@ -378,15 +378,15 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          while IFS='|' read -r package mode earlier_release_dependencies; do
+          while IFS='|' read -r package mode earlier_release_dependencies cargo_manifest; do
             case "${mode}" in
               verify)
-                cargo package -p "$package" --locked --allow-dirty
+                cargo package --manifest-path "$cargo_manifest" --locked --allow-dirty
                 ;;
               no_verify)
                 printf 'Validating %s without registry verification; waiting for earlier release crate(s): %s\n' \
                   "$package" "$earlier_release_dependencies"
-                cargo package -p "$package" --locked --allow-dirty --no-verify
+                cargo package --manifest-path "$cargo_manifest" --locked --allow-dirty --no-verify
                 ;;
               *)
                 printf 'Unknown package-check mode for %s: %s\n' "$package" "$mode" >&2

@@ -210,6 +210,7 @@ def cargo_package_check_plan(workspace_toml: Path, manifest: dict) -> list[dict[
         plan.append(
             {
                 "package": package,
+                "cargo_toml": crate["cargo_toml"],
                 "mode": "no_verify" if earlier_release_dependencies else "verify",
                 "earlier_release_dependencies": earlier_release_dependencies,
             }
@@ -220,7 +221,7 @@ def cargo_package_check_plan(workspace_toml: Path, manifest: dict) -> list[dict[
 def cmd_package_check_plan(args: object) -> int:
     manifest = load_manifest(Path(args.manifest))
     for entry in cargo_package_check_plan(Path(args.workspace_toml), manifest):
-        print(f"{entry['package']}|{entry['mode']}|{','.join(entry['earlier_release_dependencies'])}")
+        print(f"{entry['package']}|{entry['mode']}|{','.join(entry['earlier_release_dependencies'])}|{entry['cargo_toml']}")
     return 0
 
 
@@ -253,6 +254,11 @@ def _assert_workspace_inherited_version(workspace_toml: Path, relative_path: str
     path = _resolve_workspace_path(workspace_toml, relative_path)
     data = tomllib.loads(path.read_text(encoding="utf-8"))
     value = data.get("package", {}).get("version")
+    if "workspace" in data and path.resolve() != workspace_toml.resolve():
+        actual = data["workspace"].get("package", {}).get("version") if isinstance(value, dict) else value
+        if actual != workspace_version(workspace_toml):
+            raise SystemExit(f"{relative_path}: standalone version must match release workspace version")
+        return
     if isinstance(value, dict) and value.get("workspace") is True:
         return
     if allow_literal_base and value == workspace_version(workspace_toml).split("-", 1)[0]:

@@ -98,16 +98,17 @@ jobs:
           publish_if_missing() {
             local crate="$1"
             local wait_seconds="${2:-0}"
+            local cargo_manifest="$3"
             if crate_exists "$crate" "$version"; then
               echo "${crate} ${version} already published; skipping"
               return 0
             fi
-            cargo publish -p "$crate" --locked
+            cargo publish --manifest-path "$cargo_manifest" --locked
             if [[ "$wait_seconds" != "0" ]]; then
               sleep "$wait_seconds"
             fi
           }
 
-          while IFS='|' read -r package wait_secs; do
-            publish_if_missing "$package" "${wait_secs:-0}"
+          while IFS='|' read -r package wait_secs cargo_manifest; do
+            publish_if_missing "$package" "${wait_secs:-0}" "$cargo_manifest"
           done < <(python3 .github/scripts/release_artifacts.py list-publish-plan --manifest "${RELEASE_ARTIFACT_MANIFEST}")

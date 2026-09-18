@@ -348,7 +348,7 @@ def cmd_validate_manifest(args: argparse.Namespace) -> int:
         members = workspace_members(Path(args.workspace_toml))
         missing = []
         for crate in manifest["crates"]:
-            if crate["cargo_toml"].removesuffix("/Cargo.toml") not in members:
+            if crate["cargo_toml"].removesuffix("/Cargo.toml") not in members and "workspace" not in tomllib.loads(Path(crate["cargo_toml"]).read_text()):
                 missing.append(crate["cargo_toml"])
         if missing:
             raise SystemExit(f"manifest references non-member crates: {', '.join(missing)}")
@@ -423,7 +423,7 @@ def cmd_validate_manifest(args: argparse.Namespace) -> int:
 def cmd_list_publish_plan(args: argparse.Namespace) -> int:
     manifest = load_manifest(Path(args.manifest))
     for crate in manifest["crates"]:
-        print(f"{crate['package']}|{crate['wait_after_publish_seconds']}")
+        print(f"{crate['package']}|{crate['wait_after_publish_seconds']}|{crate['cargo_toml']}")
     return 0
 
 
