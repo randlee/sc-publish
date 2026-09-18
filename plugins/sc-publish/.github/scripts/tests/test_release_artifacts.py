@@ -451,6 +451,7 @@ def run_release_gate_readiness(
         "release_manifest.py",
         "release_registry.py",
         "npm_release.py",
+        "release_python.py",
         "release_gate.sh",
     ):
         (scripts_dir / script_name).write_text(
@@ -1029,6 +1030,7 @@ def test_no_single_repo_concerns_leak_into_kit_workflows_actions_or_scripts() ->
         "release_manifest.py",
         "release_registry.py",
         "npm_release.py",
+        "release_python.py",
         "release_gate.sh",
     )
     github_root = repo_root() / ".github"
@@ -3475,6 +3477,7 @@ def test_standalone_crate_manifest_is_validated_and_planned(tmp_path):
             assert "standalone|no_verify|sc-compose|bindings/standalone/Cargo.toml" in result.stdout
     result = run_fixture_command(tmp_path, "list-publish-plan", manifest=manifest)
     assert "standalone|0|bindings/standalone/Cargo.toml" in result.stdout
+    sys.path.insert(0, str(repo_root() / ".github/scripts"))
     from release_manifest import _assert_workspace_inherited_version
     _assert_workspace_inherited_version(workspace, "bindings/standalone/Cargo.toml")
     (standalone / "Cargo.toml").write_text('[package]\nname="standalone"\nversion="0.0.1"\n[workspace]\n')

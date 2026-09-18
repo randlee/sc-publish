@@ -19,6 +19,9 @@ if TYPE_CHECKING:
 
 
 PACKAGE_ROOT = Path(__file__).resolve().parent
+sys.path.insert(0, str(PACKAGE_ROOT / ".github" / "scripts"))
+from release_python import wheel_targets
+
 SOURCE_ROOT_MARKER = ".sc-publish-source-root"
 TEMPLATES = {
     Path("release/publish-channel-contracts.toml.j2"): Path(
@@ -215,7 +218,10 @@ def load_install_values(path: Path) -> dict[str, object]:
     )
     for position, distribution in enumerate(distributions, start=1):
         _require_boolean(distribution.get("sdist"), f"python_distributions[{position}].sdist")
-        _require_string_array(distribution.get("wheels"), f"python_distributions[{position}].wheels")
+        try:
+            wheel_targets(distribution)
+        except (ValueError, KeyError) as error:
+            raise argparse.ArgumentTypeError(f"python_distributions[{position}]: {error}") from error
         cargo_manifest = distribution.get("cargo_manifest")
         build_system = distribution.get("build_system")
         if cargo_manifest is None and build_system is None:
