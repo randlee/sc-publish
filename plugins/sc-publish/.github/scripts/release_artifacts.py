@@ -193,6 +193,8 @@ def cmd_public_registry_check_plan(args: argparse.Namespace) -> int:
                 manifest["channel_contracts"], "pypi", distribution["name"], args.version
             )
         )
+    for package in manifest.get("npm_packages", []):
+        checks.extend(_public_registry_checks(manifest["channel_contracts"], "npm", package["name"], args.version))
     print(json.dumps({"checks": checks}, separators=(",", ":")))
     return 0
 
@@ -480,6 +482,8 @@ def cmd_release_asset_patterns(args: argparse.Namespace) -> int:
     project = _require_project(manifest)
     for target in _release_targets_by_name(manifest).values():
         print(_release_asset_pattern(project, target))
+    for package in manifest.get("npm_packages", []):
+        print("^" + re.escape(package["name"].replace("@", "").replace("/", "-")) + r"-[0-9].*\.tgz$")
     return 0
 
 

@@ -26,7 +26,7 @@ TEMPLATES = {
     Path("release/publish-artifacts.toml.j2"): Path("release/publish-artifacts.toml"),
 }
 
-CHANNEL_NAMES = ("pypi", "homebrew", "scoop", "winget")
+CHANNEL_NAMES = ("pypi", "npm", "homebrew", "scoop", "winget")
 
 # Copied byte-for-byte, but installed under a different consumer path so the
 # kit never overwrites a consumer-owned file of the same name.
@@ -37,6 +37,7 @@ RENAMED_FILES = {
 # Empty sentinels keep every channel variable defined under
 # strict-undeclared-variable rendering; undeclared channels render no table.
 CHANNEL_TEMPLATE_SENTINELS: dict[str, dict[str, Any]] = {
+    "npm": {"workflow": "", "dispatch_inputs": {}},
     "pypi": {
         "workflow": "",
         "dispatch_inputs": {},
@@ -232,6 +233,17 @@ def load_install_values(path: Path) -> dict[str, object]:
                     f"python_distributions[{position}].build_system must be setuptools"
                 )
 
+    npm_packages = _require_entries(values.get("npm_packages", []), "npm_packages", ("name", "source"))
+    names = [entry["name"] for entry in npm_packages]
+    if len(names) != len(set(names)):
+        raise argparse.ArgumentTypeError("npm_packages names must be unique")
+    for entry in npm_packages:
+        source = Path(entry["source"])
+        if source.is_absolute() or ".." in source.parts:
+            raise argparse.ArgumentTypeError("npm_packages source must stay within the repository")
+    if bool(npm_packages) != ("npm" in values.get("channels", {})):
+        raise argparse.ArgumentTypeError("npm_packages and channels.npm must be declared together")
+
     # Channels are opt-in: a consumer declares only the post-release channels
     # it actually publishes to, and only declared channels render a table.
     channels = _require_mapping(values.get("channels"), "channels")
@@ -404,6 +416,7 @@ def template_values(values: dict[str, object]) -> dict[str, object]:
             for package in _require_array(values["python_packages"], "python_packages")
         ],
         "python_distributions": distributions,
+        "npm_packages": [_toml_scalars(entry) for entry in values.get("npm_packages", [])],
         "channels": converted_channels,
         "has_readme_dependency_crate": "readme_dependency_crate" in project,
         "has_renderer_archive_path": "renderer_archive_path" in project,

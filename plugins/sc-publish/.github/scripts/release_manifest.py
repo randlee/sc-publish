@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import re
 import tomllib
+import urllib.parse
 from pathlib import Path, PurePosixPath
 
 
@@ -60,6 +61,7 @@ def load_manifest(path: Path, *, with_channel_contracts: bool = False) -> dict:
         "release_targets": data.get("release_targets", []),
         "python_packages": python_packages,
         "python_distributions": python_distributions,
+        "npm_packages": data.get("npm_packages", []),
         "channels": data.get("channels", {}),
     }
     if with_channel_contracts:
@@ -487,7 +489,7 @@ def _normalize_pypi_name(name: str) -> str:
 
 
 def _url_from_contract(template: str, name: str, version: str) -> str:
-    return template.format(name=name, version=version)
+    return template.format(name=urllib.parse.quote(name, safe=""), version=urllib.parse.quote(version, safe=""))
 
 
 def _public_registry_checks(
