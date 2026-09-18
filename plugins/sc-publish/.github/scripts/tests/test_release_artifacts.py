@@ -3500,6 +3500,7 @@ def test_package_only_release_has_no_binary_asset_expectations(tmp_path):
     text = manifest.read_text()
     import re
     text = re.sub(r'\[\[release_binaries\]\]\nname = "[^"]+"\n', '', text)
+    text = text.split('[channels.homebrew]', 1)[0]
     manifest.write_text(text)
     result = run_fixture_command(tmp_path, 'validate-manifest', '--workspace-toml', str(workspace), manifest=manifest)
     assert result.returncode == 0, result.stderr

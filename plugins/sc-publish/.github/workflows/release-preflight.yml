@@ -326,6 +326,7 @@ jobs:
           failures=()
           channel_is_preserved() {
             local expected="$1" channel
+            [[ -n "${ALREADY_PUBLISHED_CHANNELS:-}" ]] || return 1
             IFS=',' read -r -a channels <<<"${ALREADY_PUBLISHED_CHANNELS:-}"
             for channel in "${channels[@]}"; do
               channel="$(tr -d '[:space:]' <<<"${channel}")"

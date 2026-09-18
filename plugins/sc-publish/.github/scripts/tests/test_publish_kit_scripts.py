@@ -330,6 +330,8 @@ class ReleaseScriptTests(unittest.TestCase):
 
     def test_runtime_renderer_paths_use_the_bootstrapped_exact_pin(self) -> None:
         """Guard every package Python-renderer path against independent pins."""
+        if not (PACKAGE_ROOT / ".sc-publish-source-root").exists():
+            self.skipTest("source-repository CI pin check; consumer CI is caller-owned")
         repository = PACKAGE_ROOT.parents[1]
         bootstrap = (SCRIPTS / "bootstrap_sc_compose.py").read_text(encoding="utf-8")
         ci = (repository / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")

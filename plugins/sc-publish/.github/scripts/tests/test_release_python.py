@@ -68,3 +68,30 @@ def test_workflow_reuses_maturin_zig_and_declares_all_build_dependencies():
     assert {"build-python-wheels", "build-python-sdists", "build-npm"} <= set(github_release["needs"])
     assert "!failure()" in github_release["if"]
     assert "needs.build.result == 'skipped'" in github_release["if"]
+
+
+@pytest.mark.parametrize('workflow_name', ['release.yml', 'crates-publish.yml'])
+def test_actual_publish_shell_uses_standalone_manifest_with_mock_cargo(tmp_path, workflow_name):
+    import os
+    import re
+    import subprocess
+    import yaml
+    workflow = yaml.safe_load((INSTALL.PACKAGE_ROOT / '.github/workflows' / workflow_name).read_text())
+    step = next(step for job in workflow['jobs'].values() for step in job.get('steps', []) if step.get('name') == 'Publish crates in order (idempotent)')
+    shell = re.sub(r'\$\{\{[^}]+\}\}', '1.2.3', step['run'])
+    stub = tmp_path / 'python3'
+    stub.write_text('''#!/bin/sh
+case "$2" in
+ list-publish-plan) printf 'standalone|0|bindings/standalone/Cargo.toml\\n' ;;
+ public-registry-inquiry-plan) printf '{"checks":[{"version_lookup_url":"https://example.invalid"}]}\\n' ;;
+ registry-status) printf 'absent\\n' ;;
+ *) exit 2 ;;
+esac
+''')
+    stub.chmod(0o755)
+    cargo = tmp_path / 'cargo'
+    cargo.write_text('#!/bin/sh\nprintf "%s\\n" "$@" > cargo-args\n')
+    cargo.chmod(0o755)
+    result = subprocess.run(['bash', '-c', shell], cwd=tmp_path, env={**os.environ, 'PATH':str(tmp_path)+os.pathsep+os.environ['PATH'], 'RELEASE_ARTIFACT_MANIFEST':'release/publish-artifacts.toml', 'RELEASE_TAG':'v1.2.3'}, capture_output=True, text=True)
+    assert result.returncode == 0, result.stderr
+    assert (tmp_path / 'cargo-args').read_text().splitlines() == ['publish', '--manifest-path', 'bindings/standalone/Cargo.toml', '--locked']
