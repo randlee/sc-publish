@@ -133,3 +133,69 @@ def test_registry_404_is_absent():
 def test_unsafe_source_rejected():
     with pytest.raises(ValueError, match="unsafe"):
         npm.packages({"npm_packages": [{"name": "example", "source": "../escape"}], "channels": {"npm": {}}})
+
+
+def test_build_uses_lockfile_and_never_publishes(release, monkeypatch):
+    manifest, directory, path = release
+    monkeypatch.chdir(directory)
+    source = directory / "bindings/typescript"
+    source.mkdir(parents=True)
+    (source / "package.json").write_text(json.dumps({"name": "@example/client", "version": "1.2.3"}))
+    with patch.object(npm.subprocess, "run") as run:
+        npm.build(manifest, "v1.2.3", directory)
+    assert [call.args[0][:2] for call in run.call_args_list] == [["npm", "ci"], ["npm", "run"], ["npm", "pack"]]
+    assert "--ignore-scripts" in run.call_args_list[-1].args[0]
+
+
+def test_version_mismatch_fails_before_build(release, monkeypatch):
+    manifest, directory, _ = release
+    monkeypatch.chdir(directory)
+    source = directory / "bindings/typescript"
+    source.mkdir(parents=True)
+    (source / "package.json").write_text(json.dumps({"name": "@example/client", "version": "0.0.1"}))
+    with patch.object(npm.subprocess, "run") as run:
+        with pytest.raises(ValueError, match="source npm"):
+            npm.build(manifest, "v1.2.3", directory)
+    run.assert_not_called()
+
+
+def test_all_archives_checked_before_first_publication(release):
+    manifest, directory, _ = release
+    manifest["npm_packages"].append({"name": "other", "source": "other"})
+    with patch.object(npm.subprocess, "run") as run, patch.object(npm, "registry_version") as lookup:
+        with pytest.raises(ValueError, match="missing regular"):
+            npm.publish(manifest, "v1.2.3", directory, dry_run=False)
+    run.assert_not_called()
+    lookup.assert_not_called()
+
+
+def test_tarball_slug_collision_rejected():
+    manifest = {"npm_packages": [{"name": "@example/client", "source": "a"}, {"name": "example-client", "source": "b"}], "channels": {"npm": {}}}
+    with pytest.raises(ValueError, match="duplicate"):
+        npm.packages(manifest)
+
+
+def test_workflow_credential_and_artifact_contract():
+    import yaml
+    root = INSTALL.PACKAGE_ROOT / ".github"
+    workflow = yaml.safe_load((root / "workflows/npm-publish.yml").read_text())
+    job = workflow["jobs"]["publish"]
+    assert job["environment"] == "npm"
+    assert workflow["permissions"] == {"contents": "read"}
+    credential_steps = [step for step in job["steps"] if "NPM_TOKEN" in str(step)]
+    assert len(credential_steps) == 1
+    assert credential_steps[0]["if"] == "${{ !inputs.dry_run }}"
+    assert "npm_release.py publish" in credential_steps[0]["run"]
+    download = next(step for step in job["steps"] if step.get("name") == "Download immutable release assets")
+    assert '.immutable == true' in download["run"]
+    assert "checksums.txt" in download["run"]
+    assert all("npm ci" not in step.get("run", "") for step in job["steps"])
+
+
+def test_node24_runtime_floors():
+    import re
+    floors = {"checkout": 5, "setup-python": 6, "setup-node": 6, "cache": 5, "upload-artifact": 6, "download-artifact": 7}
+    for path in (INSTALL.PACKAGE_ROOT / ".github").rglob("*.yml"):
+        for name, major in re.findall(r"uses:\s*actions/([\w-]+)@v(\d+)", path.read_text()):
+            assert int(major) >= floors[name], str(path)
+    assert "softprops/action-gh-release@v3" in (INSTALL.PACKAGE_ROOT / ".github/workflows/release.yml").read_text()

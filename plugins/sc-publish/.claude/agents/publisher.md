@@ -225,7 +225,7 @@ exist; run `Release Preflight` and report its sanitized result.
 5. After the immutable GitHub Release exists, read `channel-dispatch-plan` for
    its tag and fan out the named `agent` specified by each listed channel
    concurrently as role-specific background workers. The standard roles are `crates-io-publisher`,
-   `github-release-publisher`, `pypi-publisher`, `homebrew-publisher`,
+   `github-release-publisher`, `pypi-publisher`, `npm-publisher`, `homebrew-publisher`,
    `winget-publisher`, and `scoop-publisher`. Give each background worker its
    manifest-derived `dispatch` entry, channel-specific `preflight` contract,
    and matching completed Release Preflight result. Each background worker dispatches

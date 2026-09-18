@@ -450,6 +450,7 @@ def run_release_gate_readiness(
         "release_artifacts.py",
         "release_manifest.py",
         "release_registry.py",
+        "npm_release.py",
         "release_gate.sh",
     ):
         (scripts_dir / script_name).write_text(
@@ -909,7 +910,7 @@ def test_crates_leg_is_separate_and_independently_retryable() -> None:
     crates_text = crates_publish_workflow_text()
 
     # The GitHub Release leg must not depend on crates.io publication.
-    assert "needs: [gate-and-tag, build, build-python-wheels, build-python-sdists]" in release_text
+    assert "needs: [gate-and-tag, build, build-python-wheels, build-python-sdists, build-npm]" in release_text
     assert "needs: [gate-and-tag, build, publish," not in release_text
 
     assert "workflow_dispatch:" in crates_text
@@ -1008,6 +1009,7 @@ def test_no_single_repo_concerns_leak_into_kit_workflows_actions_or_scripts() ->
         "release-preflight.yml",
         "crates-publish.yml",
         "pypi-publish.yml",
+        "npm-publish.yml",
         "homebrew-publish.yml",
         "scoop-publish.yml",
         "winget-publish.yml",
@@ -1026,6 +1028,7 @@ def test_no_single_repo_concerns_leak_into_kit_workflows_actions_or_scripts() ->
         "release_artifacts.py",
         "release_manifest.py",
         "release_registry.py",
+        "npm_release.py",
         "release_gate.sh",
     )
     github_root = repo_root() / ".github"
@@ -2118,7 +2121,7 @@ def test_release_workflow_enforces_python_release_invariants() -> None:
     assert "TEST_PYPI_API_TOKEN" in text
     assert "secrets.TEST_PYPI_TOKEN" not in text
     assert "--repository testpypi" in text
-    assert "for pattern in *.tar.gz *.zip *.whl; do" in text
+    assert "for pattern in *.tar.gz *.zip *.whl *.tgz; do" in text
     assert "uses: ./.github/actions/setup-python-release-build" in text
     assert "update-homebrew:" not in text
     assert "publish-winget:" not in text
@@ -2407,7 +2410,7 @@ def test_root_release_workflow_threads_retry_provenance_and_builds_from_main() -
     assert 'git tag "$tag" "$main_sha"' in workflow
     assert "build_ref: ${{ steps.release-ref.outputs.build_ref }}" in workflow
     assert workflow.count('echo "build_ref=$main_sha" >> "$GITHUB_OUTPUT"') == 1
-    assert workflow.count("needs.gate-and-tag.outputs.build_ref") == 9
+    assert workflow.count("needs.gate-and-tag.outputs.build_ref") == 10
     assert "gate-and-tag.outputs.release_ref" not in workflow
     assert "ref: ${{ needs.gate-and-tag.outputs.release_tag }}" not in workflow
     assert "ref: ${{ needs.gate-and-tag.outputs.release_ref }}" not in workflow
@@ -2958,7 +2961,7 @@ def test_release_workflow_collects_wheels_without_redundant_zip_sweep() -> None:
     text = release_workflow_text()
 
     assert (
-        "find artifacts -type f \\( -name '*.tar.gz' -o -name '*.zip' \\) -exec mv {} release/ \\;"
+        "find artifacts -type f \\( -name '*.tar.gz' -o -name '*.zip' -o -name '*.tgz' \\) -exec mv {} release/ \\;"
         in text
     )
     assert "find artifacts -type f -name '*.whl' -exec mv {} release/ \\;" in text
@@ -2984,7 +2987,7 @@ def test_release_workflow_checks_out_repo_before_local_python_setup_action() -> 
       matrix: ${{ fromJSON(needs.release-plan.outputs.python_wheel_matrix) }}
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           ref: ${{ needs.gate-and-tag.outputs.build_ref }}
       - uses: ./.github/actions/setup-python-release-build"""
@@ -2996,7 +2999,7 @@ def test_release_workflow_checks_out_repo_before_local_python_setup_action() -> 
       matrix: ${{ fromJSON(needs.release-plan.outputs.python_sdist_matrix) }}
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           ref: ${{ needs.gate-and-tag.outputs.build_ref }}
       - uses: ./.github/actions/setup-python-release-build"""

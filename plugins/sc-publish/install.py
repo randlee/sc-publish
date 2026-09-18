@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import difflib
 import json
+import re
 import shutil
 import sys
 import tempfile
@@ -237,16 +238,21 @@ def load_install_values(path: Path) -> dict[str, object]:
     names = [entry["name"] for entry in npm_packages]
     if len(names) != len(set(names)):
         raise argparse.ArgumentTypeError("npm_packages names must be unique")
+    asset_names = [entry["name"].replace("@", "").replace("/", "-") for entry in npm_packages]
+    if len(asset_names) != len(set(asset_names)):
+        raise argparse.ArgumentTypeError("npm_packages archive names must be unique")
     for entry in npm_packages:
+        if not re.fullmatch(r"(?:@[a-z0-9][a-z0-9._-]*/)?[a-z0-9][a-z0-9._-]*", entry["name"]):
+            raise argparse.ArgumentTypeError("invalid npm package name")
         source = Path(entry["source"])
         if source.is_absolute() or ".." in source.parts:
             raise argparse.ArgumentTypeError("npm_packages source must stay within the repository")
-    if bool(npm_packages) != ("npm" in values.get("channels", {})):
-        raise argparse.ArgumentTypeError("npm_packages and channels.npm must be declared together")
 
     # Channels are opt-in: a consumer declares only the post-release channels
     # it actually publishes to, and only declared channels render a table.
     channels = _require_mapping(values.get("channels"), "channels")
+    if bool(npm_packages) != ("npm" in channels):
+        raise argparse.ArgumentTypeError("npm_packages and channels.npm must be declared together")
     unknown_channels = sorted(set(channels) - set(CHANNEL_NAMES))
     if unknown_channels:
         raise argparse.ArgumentTypeError(

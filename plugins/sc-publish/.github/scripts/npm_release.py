@@ -6,7 +6,6 @@ import argparse
 import base64
 import hashlib
 import json
-import os
 from pathlib import Path
 import re
 import subprocess
@@ -24,13 +23,16 @@ REGISTRY = "https://registry.npmjs.org"
 def packages(manifest):
     entries = manifest.get("npm_packages", [])
     names = set()
+    assets = set()
     for entry in entries:
         name, source = entry["name"], Path(entry["source"])
         if not re.fullmatch(r"(?:@[a-z0-9][a-z0-9._-]*/)?[a-z0-9][a-z0-9._-]*", name):
             raise ValueError("invalid npm package name")
-        if name in names or source.is_absolute() or ".." in source.parts:
+        asset = filename(name, "")
+        if name in names or asset in assets or source.is_absolute() or ".." in source.parts:
             raise ValueError("duplicate npm package or unsafe source path")
         names.add(name)
+        assets.add(asset)
     if bool(entries) != ("npm" in manifest.get("channels", {})):
         raise ValueError("npm_packages and channels.npm must be declared together")
     return entries
@@ -48,7 +50,12 @@ def filename(name, release_version):
 
 def metadata(path):
     with tarfile.open(path, "r:gz") as archive:
-        members = [m for m in archive.getmembers() if m.name == "package/package.json"]
+        contents = archive.getmembers()
+        for member in contents:
+            parts = Path(member.name).parts
+            if not parts or parts[0] != "package" or ".." in parts or not (member.isfile() or member.isdir()):
+                raise ValueError("unsafe npm archive member")
+        members = [m for m in contents if m.name == "package/package.json"]
         if len(members) != 1 or not members[0].isfile() or members[0].size > 1024 * 1024:
             raise ValueError("archive must contain exactly one regular package/package.json")
         return json.load(archive.extractfile(members[0]))
@@ -58,7 +65,10 @@ def check_metadata(path, name, release_version):
     data = metadata(path)
     if data.get("name") != name or data.get("version") != release_version or data.get("private"):
         raise ValueError("npm archive identity/version/private mismatch")
-    if data.get("publishConfig", {}).get("registry", REGISTRY).rstrip("/") != REGISTRY:
+    config = data.get("publishConfig", {})
+    if config.get("access", "public") != "public" or "tag" in config:
+        raise ValueError("npm publishConfig conflicts with shared public/tag policy")
+    if config.get("registry", REGISTRY).rstrip("/") != REGISTRY:
         raise ValueError("npm archive redirects publication to another registry")
 
 

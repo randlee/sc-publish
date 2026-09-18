@@ -27,7 +27,7 @@ BOOTSTRAP_SPEC.loader.exec_module(BOOTSTRAP)
 
 
 class ReleaseManifestTests(unittest.TestCase):
-    def test_channel_contracts_describe_all_six_workers(self) -> None:
+    def test_channel_contracts_describe_all_seven_workers(self) -> None:
         contracts = release_manifest.load_channel_contracts(
             PACKAGE_ROOT / "release" / "publish-channel-contracts.toml.j2"
         )
@@ -37,6 +37,7 @@ class ReleaseManifestTests(unittest.TestCase):
                 "crates-io-publisher",
                 "github-release-publisher",
                 "pypi-publisher",
+                "npm-publisher",
                 "homebrew-publisher",
                 "scoop-publisher",
                 "winget-publisher",

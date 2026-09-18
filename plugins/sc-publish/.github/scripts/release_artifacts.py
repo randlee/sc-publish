@@ -317,6 +317,8 @@ def cmd_validate_manifest(args: argparse.Namespace) -> int:
     _require_project(manifest)
     _release_targets_by_name(manifest)
     binaries = _release_binaries(manifest)
+    from npm_release import packages as npm_packages
+    npm_packages(manifest)
     channel_names = _channel_names(manifest)
     for channel_name in channel_names:
         _channel_dispatch_config(manifest, channel_name)
@@ -438,8 +440,6 @@ def _python_matrix_entry(distribution: dict) -> dict[str, str]:
 
 def cmd_python_wheel_matrix(args: argparse.Namespace) -> int:
     manifest = load_manifest(Path(args.manifest))
-    # An empty matrix is valid: Rust-only consumers build no Python wheels,
-    # and release.yml skips the wheel jobs when the matrix is empty.
     include = [
         {**_python_matrix_entry(distribution), "os": os_name}
         for distribution in _python_distribution_entries(manifest)
