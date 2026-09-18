@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import argparse
 import json
-from release_python import cmd_python_wheel_matrix, wheel_targets, verify_platforms
+from release_python import cmd_python_wheel_matrix, wheel_targets, verify_platforms, explicit_asset_patterns
 
 import re
 import shutil
@@ -422,7 +422,7 @@ def cmd_validate_manifest(args: argparse.Namespace) -> int:
 def cmd_list_publish_plan(args: argparse.Namespace) -> int:
     manifest = load_manifest(Path(args.manifest))
     for crate in manifest["crates"]:
-        print(f"{crate['package']}|{crate['wait_after_publish_seconds']}|{crate['cargo_toml']}")
+        print(f"{crate['package']}|{crate['wait_after_publish_seconds']}" + (f"|{crate['cargo_toml']}" if args.include_manifest else ""))
     return 0
 
 
@@ -472,6 +472,8 @@ def cmd_release_asset_patterns(args: argparse.Namespace) -> int:
     if manifest["release_binaries"]:
         for target in _release_targets_by_name(manifest).values():
             print(_release_asset_pattern(project, target))
+    for pattern in explicit_asset_patterns(manifest):
+        print(pattern)
     for package in manifest.get("npm_packages", []):
         print("^" + re.escape(package["name"].replace("@", "").replace("/", "-")) + r"-[0-9].*\.tgz$")
     return 0
@@ -864,10 +866,12 @@ def main() -> int:
     p.set_defaults(func=validate_publish_order)
 
     p = sub.add_parser("list-publish-plan")
+    p.add_argument("--include-manifest", action="store_true")
     p.add_argument("--manifest", required=True)
     p.set_defaults(func=cmd_list_publish_plan)
 
     p = sub.add_parser("package-check-plan")
+    p.add_argument("--include-manifest", action="store_true")
     p.add_argument("--manifest", required=True)
     p.add_argument("--workspace-toml", required=True)
     p.set_defaults(func=cmd_package_check_plan)

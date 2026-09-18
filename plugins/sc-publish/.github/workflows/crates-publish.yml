@@ -111,4 +111,4 @@ jobs:
 
           while IFS='|' read -r package wait_secs cargo_manifest; do
             publish_if_missing "$package" "${wait_secs:-0}" "$cargo_manifest"
-          done < <(python3 .github/scripts/release_artifacts.py list-publish-plan --manifest "${RELEASE_ARTIFACT_MANIFEST}")
+          done < <(python3 .github/scripts/release_artifacts.py list-publish-plan --include-manifest --manifest "${RELEASE_ARTIFACT_MANIFEST}")

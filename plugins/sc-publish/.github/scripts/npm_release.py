@@ -73,9 +73,12 @@ def check_metadata(path, name, release_version):
 
 
 def build(manifest, tag, asset_dir):
+    entries = packages(manifest)
+    if not entries:
+        return
     release_version = version(tag)
     asset_dir.mkdir(parents=True, exist_ok=True)
-    for entry in packages(manifest):
+    for entry in entries:
         source = Path(entry["source"]).resolve()
         if not source.is_relative_to(Path.cwd().resolve()):
             raise ValueError("npm source escapes checkout")

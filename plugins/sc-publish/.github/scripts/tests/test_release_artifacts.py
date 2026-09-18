@@ -802,8 +802,8 @@ def test_package_check_plan_skips_registry_verification_only_for_earlier_release
 
     assert result.returncode == 0, result.stderr
     assert result.stdout.splitlines() == [
-        "sc-composer|verify||crates/sc-composer/Cargo.toml",
-        "sc-compose|no_verify|sc-composer|crates/sc-compose/Cargo.toml",
+        "sc-composer|verify|",
+        "sc-compose|no_verify|sc-composer",
     ]
 
 
@@ -829,8 +829,8 @@ def test_package_check_plan_keeps_full_verification_for_nonrelease_dependencies(
 
     assert result.returncode == 0, result.stderr
     assert result.stdout.splitlines() == [
-        "sc-composer|verify||crates/sc-composer/Cargo.toml",
-        "sc-compose|verify||crates/sc-compose/Cargo.toml",
+        "sc-composer|verify|",
+        "sc-compose|verify|",
     ]
 
 
@@ -974,7 +974,7 @@ def test_github_release_leg_is_detect_and_skip(tmp_path: Path) -> None:
         text.count(
             "if: ${{ steps.published_release_probe.outputs.release_state != 'complete' || inputs.replace_release_assets == true }}"
         )
-        == 4
+        == 5
     )
     assert (
         "if: ${{ steps.published_release_probe.outputs.release_state == 'complete' && inputs.replace_release_assets != true }}"
@@ -3471,11 +3471,11 @@ def test_standalone_crate_manifest_is_validated_and_planned(tmp_path):
     with manifest.open("a") as output:
         output.write('\n[[crates]]\nartifact="standalone"\npackage="standalone"\ncargo_toml="bindings/standalone/Cargo.toml"\npublish=true\npublish_order=3\nwait_after_publish_seconds=0\n')
     for command in ["validate-manifest", "validate-publish-order", "package-check-plan"]:
-        result = run_fixture_command(tmp_path, command, "--workspace-toml", str(workspace), manifest=manifest)
+        result = run_fixture_command(tmp_path, command, "--workspace-toml", str(workspace), *(["--include-manifest"] if command == "package-check-plan" else []), manifest=manifest)
         assert result.returncode == 0, result.stderr
         if command == "package-check-plan":
             assert "standalone|no_verify|sc-compose|bindings/standalone/Cargo.toml" in result.stdout
-    result = run_fixture_command(tmp_path, "list-publish-plan", manifest=manifest)
+    result = run_fixture_command(tmp_path, "list-publish-plan", "--include-manifest", manifest=manifest)
     assert "standalone|0|bindings/standalone/Cargo.toml" in result.stdout
     sys.path.insert(0, str(repo_root() / ".github/scripts"))
     from release_manifest import _assert_workspace_inherited_version
@@ -3493,3 +3493,19 @@ def test_all_cargo_publication_and_package_checks_use_manifest_path():
     text = release_preflight_workflow_text()
     assert 'cargo package --manifest-path "$cargo_manifest" --locked' in text
     assert 'cargo package -p' not in text
+
+
+def test_package_only_release_has_no_binary_asset_expectations(tmp_path):
+    workspace, manifest = write_repo_fixture(tmp_path, manifest_wheels=["ubuntu-latest"])
+    text = manifest.read_text()
+    import re
+    text = re.sub(r'\[\[release_binaries\]\]\nname = "[^"]+"\n', '', text)
+    manifest.write_text(text)
+    result = run_fixture_command(tmp_path, 'validate-manifest', '--workspace-toml', str(workspace), manifest=manifest)
+    assert result.returncode == 0, result.stderr
+    result = run_fixture_command(tmp_path, 'build-plan', manifest=manifest)
+    assert json.loads(result.stdout)['has_release_binaries'] is False
+    assert json.loads(result.stdout)['has_python_wheels'] is True
+    result = run_fixture_command(tmp_path, 'release-asset-patterns', manifest=manifest)
+    assert result.returncode == 0
+    assert result.stdout == ''

@@ -64,9 +64,21 @@ def matrix_entry(distribution):
 def cmd_python_wheel_matrix(args):
     from release_manifest import load_manifest, _python_distribution_entries
     manifest = load_manifest(Path(args.manifest))
-    include = [{**matrix_entry(distribution), **wheel} for distribution in _python_distribution_entries(manifest) for wheel in wheel_targets(distribution)]
+    include = [{**matrix_entry(distribution), **(wheel if wheel["target"] else {"os": wheel["os"]})} for distribution in _python_distribution_entries(manifest) for wheel in wheel_targets(distribution)]
     print(json.dumps({"include": include}, separators=(",", ":")))
     return 0
+
+
+def explicit_asset_patterns(manifest):
+    for distribution in manifest.get("python_distributions", []):
+        targets = [item for item in wheel_targets(distribution) if item["platform"]]
+        if not targets:
+            continue
+        name = re.escape(distribution["name"].replace("-", "_"))
+        for item in targets:
+            yield "^" + name + r"-.*-" + re.escape(item["platform"]) + r"\.whl$"
+        if distribution["sdist"]:
+            yield "^" + re.escape(distribution["name"]).replace(r"\-", "[-_]") + r"-.*\.tar\.gz$"
 
 
 def verify_platforms(distribution, paths):

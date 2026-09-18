@@ -161,3 +161,35 @@ setup-node v6, cache v5, upload-artifact v6, download-artifact v7, and
 softprops/action-gh-release v3 (Node24; runner >=2.327.1). Composite Rust/tool
 installation actions retain their existing pins. These action upgrades and npm
 mocks do not constitute the live release qualification required above.
+
+## Explicit wheel platforms and standalone crates
+
+Existing `python_distributions[].wheels` runner strings retain their matrix and
+native maturin/setuptools behavior. The proven sc-compose ARM runner path uses
+`maturin[zig]==1.9.4` with `--compatibility manylinux2014 --zig`.
+For explicit maturin platforms, each wheel may instead be an object:
+
+```json
+{"id":"linux-arm64","os":"ubuntu-24.04-arm","target":"aarch64-unknown-linux-gnu","platform":"manylinux_2_28_aarch64","manylinux":"2_28"}
+```
+
+`id` uniquely names the uploaded build artifact; `os` is the runner label,
+`target` is the Rust target triple, and `platform` is the expected wheel tag.
+Explicit Linux wheels reuse maturin's Zig support with the selected manylinux
+compatibility. macOS objects require `deployment_target` (for example `10.13`
+with `x86_64-apple-darwin` / `macosx_10_13_x86_64`, or `11.0` with
+`aarch64-apple-darwin` / `macosx_11_0_arm64`). Windows uses
+`x86_64-pc-windows-msvc` / `win_amd64`. Explicit platform objects require maturin;
+setuptools keeps the existing runner strings. Build output and collected release
+assets must match every declared platform exactly once.
+
+Crates with their own `[workspace]` may appear in `crates` using an explicit
+`cargo_toml`; their version must equal the release workspace version. Both
+Cargo package checks and publish jobs use `--manifest-path`. The old plan CLI
+output remains unchanged; shared workflows request the additional manifest
+column with `--include-manifest`.
+
+`release_binaries: []` is supported for package-only releases. The binary build
+and binary archive expectations are skipped; declared Python and npm build
+failures still prevent release creation. Rust crate and Python distribution
+artifact IDs must remain distinct even when they share a source crate.

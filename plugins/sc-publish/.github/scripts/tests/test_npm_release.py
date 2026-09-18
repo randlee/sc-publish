@@ -199,3 +199,18 @@ def test_node24_runtime_floors():
         for name, major in re.findall(r"uses:\s*actions/([\w-]+)@v(\d+)", path.read_text()):
             assert int(major) >= floors[name], str(path)
     assert "softprops/action-gh-release@v3" in (INSTALL.PACKAGE_ROOT / ".github/workflows/release.yml").read_text()
+
+
+@pytest.mark.parametrize('immutable,expected', [(True, 0), (False, 1)])
+def test_download_step_requires_immutable_release(tmp_path, immutable, expected):
+    import os
+    import yaml
+    workflow = yaml.safe_load((INSTALL.PACKAGE_ROOT / '.github/workflows/npm-publish.yml').read_text())
+    step = next(step for step in workflow['jobs']['publish']['steps'] if step.get('name') == 'Download immutable release assets')
+    gh = tmp_path / 'gh'
+    gh.write_text('#!/bin/sh\nif [ "$1" = api ]; then\n  printf \'%s\\n\' \'{"immutable":' + str(immutable).lower() + ',"draft":false}\'\nelse\n  touch downloaded\nfi\n')
+    gh.chmod(0o755)
+    env = {**os.environ, 'PATH': str(tmp_path) + os.pathsep + os.environ['PATH'], 'RELEASE_TAG': 'v1.2.3', 'RELEASE_REPOSITORY': 'example/project'}
+    result = subprocess.run(['bash', '-c', step['run']], cwd=tmp_path, env=env, capture_output=True)
+    assert result.returncode == expected
+    assert (tmp_path / 'downloaded').exists() is immutable

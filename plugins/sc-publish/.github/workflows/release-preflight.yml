@@ -393,7 +393,7 @@ jobs:
                 exit 1
                 ;;
             esac
-          done < <(python3 .github/scripts/release_artifacts.py package-check-plan \
+          done < <(python3 .github/scripts/release_artifacts.py package-check-plan --include-manifest \
             --manifest "${RELEASE_ARTIFACT_MANIFEST}" \
             --workspace-toml '${{ steps.build_plan.outputs.workspace_toml }}')
 

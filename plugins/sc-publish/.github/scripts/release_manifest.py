@@ -221,7 +221,7 @@ def cargo_package_check_plan(workspace_toml: Path, manifest: dict) -> list[dict[
 def cmd_package_check_plan(args: object) -> int:
     manifest = load_manifest(Path(args.manifest))
     for entry in cargo_package_check_plan(Path(args.workspace_toml), manifest):
-        print(f"{entry['package']}|{entry['mode']}|{','.join(entry['earlier_release_dependencies'])}|{entry['cargo_toml']}")
+        print(f"{entry['package']}|{entry['mode']}|{','.join(entry['earlier_release_dependencies'])}" + (f"|{entry['cargo_toml']}" if args.include_manifest else ""))
     return 0
 
 
