@@ -17,7 +17,7 @@ sequentially in this session.** Do not launch a background agent or Task.
 
 - Agent name: **`publisher`** (same role as ATM; different execution profile).
 - **Forbidden:** spawning Task subagents for `crates-io-publisher`,
-  `github-release-publisher`, `pypi-publisher`, `homebrew-publisher`,
+  `github-release-publisher`, `pypi-publisher`, `npm-publisher`, `homebrew-publisher`,
   `scoop-publisher`, `winget-publisher`, or nested `publisher`.
 - **Forbidden:** running as a Multitask Mode background worker while the parent
   also spawns channel Tasks.

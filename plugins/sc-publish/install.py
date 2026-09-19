@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import difflib
 import json
+import re
 import shutil
 import sys
 import tempfile
@@ -18,6 +19,9 @@ if TYPE_CHECKING:
 
 
 PACKAGE_ROOT = Path(__file__).resolve().parent
+sys.path.insert(0, str(PACKAGE_ROOT / ".github" / "scripts"))
+from release_python import wheel_targets
+
 SOURCE_ROOT_MARKER = ".sc-publish-source-root"
 TEMPLATES = {
     Path("release/publish-channel-contracts.toml.j2"): Path(
@@ -26,7 +30,7 @@ TEMPLATES = {
     Path("release/publish-artifacts.toml.j2"): Path("release/publish-artifacts.toml"),
 }
 
-CHANNEL_NAMES = ("pypi", "homebrew", "scoop", "winget")
+CHANNEL_NAMES = ("pypi", "npm", "homebrew", "scoop", "winget")
 
 # Copied byte-for-byte, but installed under a different consumer path so the
 # kit never overwrites a consumer-owned file of the same name.
@@ -37,6 +41,7 @@ RENAMED_FILES = {
 # Empty sentinels keep every channel variable defined under
 # strict-undeclared-variable rendering; undeclared channels render no table.
 CHANNEL_TEMPLATE_SENTINELS: dict[str, dict[str, Any]] = {
+    "npm": {"workflow": "", "dispatch_inputs": {}},
     "pypi": {
         "workflow": "",
         "dispatch_inputs": {},
@@ -213,7 +218,10 @@ def load_install_values(path: Path) -> dict[str, object]:
     )
     for position, distribution in enumerate(distributions, start=1):
         _require_boolean(distribution.get("sdist"), f"python_distributions[{position}].sdist")
-        _require_string_array(distribution.get("wheels"), f"python_distributions[{position}].wheels")
+        try:
+            wheel_targets(distribution)
+        except (ValueError, KeyError) as error:
+            raise argparse.ArgumentTypeError(f"python_distributions[{position}]: {error}") from error
         cargo_manifest = distribution.get("cargo_manifest")
         build_system = distribution.get("build_system")
         if cargo_manifest is None and build_system is None:
@@ -232,9 +240,25 @@ def load_install_values(path: Path) -> dict[str, object]:
                     f"python_distributions[{position}].build_system must be setuptools"
                 )
 
+    npm_packages = _require_entries(values.get("npm_packages", []), "npm_packages", ("name", "source"))
+    names = [entry["name"] for entry in npm_packages]
+    if len(names) != len(set(names)):
+        raise argparse.ArgumentTypeError("npm_packages names must be unique")
+    asset_names = [entry["name"].replace("@", "").replace("/", "-") for entry in npm_packages]
+    if len(asset_names) != len(set(asset_names)):
+        raise argparse.ArgumentTypeError("npm_packages archive names must be unique")
+    for entry in npm_packages:
+        if not re.fullmatch(r"(?:@[a-z0-9][a-z0-9._-]*/)?[a-z0-9][a-z0-9._-]*", entry["name"]):
+            raise argparse.ArgumentTypeError("invalid npm package name")
+        source = Path(entry["source"])
+        if source.is_absolute() or ".." in source.parts:
+            raise argparse.ArgumentTypeError("npm_packages source must stay within the repository")
+
     # Channels are opt-in: a consumer declares only the post-release channels
     # it actually publishes to, and only declared channels render a table.
     channels = _require_mapping(values.get("channels"), "channels")
+    if bool(npm_packages) != ("npm" in channels):
+        raise argparse.ArgumentTypeError("npm_packages and channels.npm must be declared together")
     unknown_channels = sorted(set(channels) - set(CHANNEL_NAMES))
     if unknown_channels:
         raise argparse.ArgumentTypeError(
@@ -404,6 +428,7 @@ def template_values(values: dict[str, object]) -> dict[str, object]:
             for package in _require_array(values["python_packages"], "python_packages")
         ],
         "python_distributions": distributions,
+        "npm_packages": [_toml_scalars(entry) for entry in values.get("npm_packages", [])],
         "channels": converted_channels,
         "has_readme_dependency_crate": "readme_dependency_crate" in project,
         "has_renderer_archive_path": "renderer_archive_path" in project,

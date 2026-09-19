@@ -18,6 +18,10 @@ required_variables:
   - crates
   - release_binaries
   - python_packages
+  - npm_packages
+  - has_channel_npm
+  - channels.npm.workflow
+  - channels.npm.dispatch_inputs
   - python_distributions
   - channels.pypi.workflow
   - channels.pypi.dispatch_inputs
@@ -174,4 +178,15 @@ manifest_template = {{ channels.scoop.manifest_template }}
 installer_target = {{ channels.scoop.installer_target }}
 binary = {{ channels.scoop.binary }}
 renderer_target = {{ channels.scoop.renderer_target }}
+{% endif %}
+
+{% for package in npm_packages %}
+[[npm_packages]]
+name = {{ package.name }}
+source = {{ package.source }}
+{% endfor %}
+{% if has_channel_npm %}
+[channels.npm]
+workflow = {{ channels.npm.workflow }}
+dispatch_inputs = {{ channels.npm.dispatch_inputs }}
 {% endif %}

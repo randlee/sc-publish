@@ -82,19 +82,19 @@ scripts, and workflows:
   through ATM teammates.
 
 The Claude/Codex publisher spawns the role-specific background channel workers
-(`crates-io-publisher`, `github-release-publisher`, `pypi-publisher`,
+(`crates-io-publisher`, `github-release-publisher`, `pypi-publisher`, `npm-publisher`,
 `homebrew-publisher`, `scoop-publisher`, `winget-publisher`). Cursor executes
 the same channel playbooks inline and sequentially. Both profiles consume the
 same non-disclosing credential preflight before any publication.
 
 ## The channel model
 
-Each publish channel — `github_release`, `crates_io`, `pypi`, `homebrew`,
+Each publish channel — `github_release`, `crates_io`, `pypi`, `npm`, `homebrew`,
 `scoop`, `winget` — is a separate, idempotent leg:
 
 - Root legs run inside `release.yml` (build, crates.io publication, GitHub
   Release creation). Post-release legs are standalone `workflow_dispatch`
-  workflows (`crates-publish.yml`, `pypi-publish.yml`, `homebrew-publish.yml`,
+  workflows (`crates-publish.yml`, `pypi-publish.yml`, `npm-publish.yml`, `homebrew-publish.yml`,
   `scoop-publish.yml`, `winget-publish.yml`) anchored on the already-published
   GitHub Release for a tag.
 - Every leg detects already-published state and skips instead of
@@ -118,3 +118,80 @@ Each publish channel — `github_release`, `crates_io`, `pypi`, `homebrew`,
 - `.claude/skills/publishing/ref/release-state-strategy.md` — release state
   machine (develop → release candidate → release → main), provenance gate,
   and post-cut drift handling.
+
+## npm packages
+
+Declare `npm_packages` (optional, defaults to empty) together with `channels.npm`:
+
+```json
+{
+  "npm_packages": [{"name": "@example/client", "source": "bindings/typescript"}],
+  "channels": {
+    "npm": {"workflow": "npm-publish.yml", "dispatch_inputs": {"dry_run": "false"}}
+  }
+}
+```
+
+Merge this fragment into the complete installer input. Do not declare npm as an
+`enabled` flag. Each source must have a committed `package-lock.json` and public
+`package.json` whose name and version match the release tag (without `v`). The
+pre-tag lockstep gate validates every declared npm package name/version and
+public publication settings; an additional gate reads the exact resolved release
+commit before creating its tag. The release build runs `npm ci`, `npm run build --if-present`, and `npm pack
+--ignore-scripts`; commit any generated inputs needed for the build. The release
+attaches the resulting `.tgz` files and includes them in `checksums.txt`.
+
+Enable GitHub immutable releases before publishing through npm; this channel
+fails closed unless the GitHub Release API confirms `immutable=true`. It does
+not enable repository settings itself. The publication workflow checks out the
+tag, downloads archives, validates every package identity/version and SHA256,
+and queries the public npm registry before writing. It never rebuilds archives.
+`NPM_TOKEN` is scoped to the GitHub `npm` environment and supplied only to the
+publication step. No OIDC permission or repository-scoped npm secret is needed.
+Read-only preflight cannot establish token validity or package write permission.
+
+Dispatch `npm-publish.yml` with `dry_run=true` (the default) for a nonpublishing
+preflight. Authorized publication uses `dry_run=false`. Existing versions skip
+only when registry SHA512 integrity matches the release bytes; mismatches fail.
+A failed upload rechecks the registry for an accepted identical archive, and an
+unresolved failure is retried with the same tag. Stable releases use the npm
+`latest` tag and prereleases use `next`; retry does not move an already-published
+version's dist-tag. Recovery of dist-tags is a separate authorized operation.
+
+Shared JavaScript action runtime floors are checkout v5, setup-python v6,
+setup-node v6, cache v5, upload-artifact v6, download-artifact v7, and
+softprops/action-gh-release v3 (Node24; runner >=2.327.1). Composite Rust/tool
+installation actions retain their existing pins. These action upgrades and npm
+mocks do not constitute the live release qualification required above.
+
+## Explicit wheel platforms and standalone crates
+
+Existing `python_distributions[].wheels` runner strings retain their matrix and
+native maturin/setuptools behavior. The proven sc-compose ARM runner path uses
+`maturin[zig]==1.9.4` with `--compatibility manylinux2014 --zig`.
+For explicit maturin platforms, each wheel may instead be an object:
+
+```json
+{"id":"linux-arm64","os":"ubuntu-24.04-arm","target":"aarch64-unknown-linux-gnu","platform":"manylinux_2_28_aarch64","manylinux":"2_28"}
+```
+
+`id` uniquely names the uploaded build artifact; `os` is the runner label,
+`target` is the Rust target triple, and `platform` is the expected wheel tag.
+Explicit Linux wheels reuse maturin's Zig support with the selected manylinux
+compatibility. macOS objects require `deployment_target` (for example `10.13`
+with `x86_64-apple-darwin` / `macosx_10_13_x86_64`, or `11.0` with
+`aarch64-apple-darwin` / `macosx_11_0_arm64`). Windows uses
+`x86_64-pc-windows-msvc` / `win_amd64`. Explicit platform objects require maturin;
+setuptools keeps the existing runner strings. Build output and collected release
+assets must match every declared platform exactly once.
+
+Crates with their own `[workspace]` may appear in `crates` using an explicit
+`cargo_toml`; their version must equal the release workspace version. Both
+Cargo package checks and publish jobs use `--manifest-path`. The old plan CLI
+output remains unchanged; shared workflows request the additional manifest
+column with `--include-manifest`.
+
+`release_binaries: []` is supported for package-only releases. The binary build
+and binary archive expectations are skipped; declared Python and npm build
+failures still prevent release creation. Rust crate and Python distribution
+artifact IDs must remain distinct even when they share a source crate.

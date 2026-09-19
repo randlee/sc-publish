@@ -9,9 +9,10 @@ on:
 jobs:
   unit:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.11"
       - name: Provision the pinned sc-compose wheel
@@ -20,6 +21,10 @@ jobs:
         run: |
           python="$(python3 plugins/sc-publish/.github/scripts/bootstrap_sc_compose.py --venv "${RUNNER_TEMP}/sc-compose-renderer")"
           echo "SC_COMPOSE_PYTHON=${python}" >> "$GITHUB_ENV"
+      - name: Install publish-kit test dependencies
+        run: '"$SC_COMPOSE_PYTHON" -m pip install pytest==8.3.5 PyYAML==6.0.3'
+      - name: Run complete source publish-kit tests
+        run: '"$SC_COMPOSE_PYTHON" -m pytest plugins/sc-publish/.github/scripts/tests -q'
       - name: Run publish-kit unit tests
         run: |
           "$SC_COMPOSE_PYTHON" -m unittest discover -s plugins/sc-publish/.github/scripts/tests -p 'test_install.py'
@@ -53,7 +58,7 @@ jobs:
           consumer="${RUNNER_TEMP}/publish-kit-consumer"
           mkdir -p "$consumer"
           "$SC_COMPOSE_PYTHON" plugins/sc-publish/install.py --input "${RUNNER_TEMP}/publish-kit-install.json" "$consumer"
-          PYTHONPATH="$consumer/.github/scripts" "$SC_COMPOSE_PYTHON" -m pytest "$consumer/.github/scripts/tests/test_release_artifacts.py" -q
+          PYTHONPATH="$consumer/.github/scripts" "$SC_COMPOSE_PYTHON" -m pytest "$consumer/.github/scripts/tests" -q
       - name: Run generic manifest integration examples
         run: |
           "$SC_COMPOSE_PYTHON" .integration/manifest_examples.py

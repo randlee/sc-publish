@@ -165,7 +165,7 @@ class InstallValuesTests(unittest.TestCase):
             path.write_text(json.dumps(values), encoding="utf-8")
             loaded = INSTALL.load_install_values(path)
         self.assertEqual(loaded, values)
-        self.assertEqual(set(loaded["channels"]), set(INSTALL.CHANNEL_NAMES))
+        self.assertEqual(set(loaded["channels"]), set(INSTALL.CHANNEL_NAMES) - {"npm"})
         self.assertEqual(loaded["python_distributions"][1]["build_system"], "setuptools")
 
     def test_load_install_values_rejects_invalid_publish_orders(self) -> None:
@@ -218,7 +218,7 @@ class InstallValuesTests(unittest.TestCase):
 
     def test_load_install_values_rejects_unknown_channel_names(self) -> None:
         values = self.valid_values()
-        values["channels"]["npm"] = {"workflow": "npm.yml", "dispatch_inputs": {}}
+        values["channels"]["unsupported"] = {"workflow": "unsupported.yml", "dispatch_inputs": {}}
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "input.json"
             path.write_text(json.dumps(values), encoding="utf-8")
