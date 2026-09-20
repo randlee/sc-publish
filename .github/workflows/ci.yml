@@ -2,7 +2,7 @@ name: CI
 
 on:
   pull_request:
-    branches: [develop, main, feature/sc-lint-immutable-source]
+    branches: [develop, main, feature/sc-lint-immutable-source, fix/wheel-shell-toolchain]
   push:
     branches: [develop, main]
 
