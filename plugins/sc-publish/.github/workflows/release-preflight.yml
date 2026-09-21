@@ -54,14 +54,12 @@ jobs:
         continue-on-error: true
         shell: bash
         env:
-          IMMUTABLE_RELEASES_READ_TOKEN: ${{ secrets.IMMUTABLE_RELEASES_READ_TOKEN }}
+          # Consumers may provide an approved Administration(read) token;
+          # github.token remains a safe contents-read fallback and a 403 is
+          # reported as indeterminate rather than claimed as enabled.
+          GH_TOKEN: ${{ secrets.IMMUTABLE_RELEASES_READ_TOKEN || github.token }}
           RELEASE_VERSION: ${{ inputs.version }}
-        run: |
-          if [[ -z "${IMMUTABLE_RELEASES_READ_TOKEN:-}" ]]; then
-            echo 'immutable-release Administration(read) credential not configured; audit skipped for this consumer'
-            exit 0
-          fi
-          GH_TOKEN="$IMMUTABLE_RELEASES_READ_TOKEN" python3 .github/scripts/release_immutability.py --tag "$RELEASE_VERSION"
+        run: python3 .github/scripts/release_immutability.py --tag "$RELEASE_VERSION"
 
       - id: secret_plan
         name: Read non-disclosing credential plan from release manifest
