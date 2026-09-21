@@ -53,6 +53,7 @@ sanitized diagnostics; redact credentials and sensitive values only.
   "job_url": "<url or unavailable>",
   "evidence": ["<location or fact>"],
   "registry_outcome": "<published/already-live/absent/unavailable>",
+  "verification": ["<check outcome or unavailable>"],
   "status": "passed|failed|blocked|apparently_available|taken|indeterminate",
   "checks": [{"kind": "<check>", "status": "passed|failed|blocked"}],
   "required_checks": [{"kind": "<contract check not run>", "reason": "<sanitized reason>"}],

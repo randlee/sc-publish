@@ -13,7 +13,7 @@ def result(**overrides):
         "channel": "npm", "status": "passed", "tag": "v1.2.3", "commit": "a" * 40,
         "command": ["npm", "publish"], "exit_status": 0, "error": None, "attempts": 1,
         "workflow_url": "unavailable", "job_url": "unavailable", "evidence": ["run log"],
-        "registry_outcome": "published",
+        "registry_outcome": "published", "verification": ["integrity matched"], "sanitized_diagnostic": "",
     }
     value.update(overrides)
     return value
@@ -27,6 +27,11 @@ def test_success_result_requires_full_provenance():
 def test_failure_result_preserves_error_details():
     parsed = parse_fenced_result("```json\n" + json.dumps(result(status="failed", exit_status=1, error={"code": "NPM.PUBLISH_FAILED", "details": "denied"})) + "\n```")
     assert parsed["error"]["details"] == "denied"
+
+
+def test_passed_nonzero_exit_is_a_contract_failure():
+    with pytest.raises(WorkerResultError, match="exit_status"):
+        parse_fenced_result("```json\n" + json.dumps(result(exit_status=1)) + "\n```")
 
 
 @pytest.mark.parametrize("text", ["", "```json\n{}\n```", "```json\nnot-json\n```"])

@@ -8,7 +8,7 @@ from typing import Any
 REQUIRED_FIELDS = {
     "channel", "status", "tag", "commit", "command", "exit_status",
     "error", "attempts", "workflow_url", "job_url", "evidence",
-    "registry_outcome",
+    "registry_outcome", "verification", "sanitized_diagnostic",
 }
 STATUSES = {"passed", "failed", "blocked", "apparently_available", "taken", "indeterminate"}
 _FENCE = re.compile(r"```(?:json)?\s*\n?(.*?)\n?```", re.DOTALL | re.IGNORECASE)
@@ -47,11 +47,17 @@ def validate_result(result: dict[str, Any]) -> dict[str, Any]:
         raise WorkerResultError("worker result command must be an argv array")
     if not isinstance(result["exit_status"], int):
         raise WorkerResultError("worker result exit_status must be an integer")
+    if result["status"] == "passed" and result["exit_status"] != 0:
+        raise WorkerResultError("successful worker result must have exit_status 0")
     if not isinstance(result["attempts"], int) or result["attempts"] < 1:
         raise WorkerResultError("worker result attempts must be a positive integer")
     for field in ("evidence", "registry_outcome"):
         if not isinstance(result[field], (str, list, dict)):
             raise WorkerResultError(f"worker result {field} must be structured or text")
+    if not isinstance(result["verification"], (str, list, dict)):
+        raise WorkerResultError("worker result verification must be structured or text")
+    if not isinstance(result["sanitized_diagnostic"], str):
+        raise WorkerResultError("worker result sanitized_diagnostic must be text")
     if result["status"] == "passed" and result["error"] not in (None, "", {}):
         raise WorkerResultError("successful worker result must have error=null or empty")
     if result["status"] != "passed" and not result["error"]:
