@@ -73,6 +73,8 @@ def validate_result(result: dict[str, Any]) -> dict[str, Any]:
         raise WorkerResultError("successful worker result must preserve observed checks")
     if result["status"] == "passed" and any(entry["status"] != "passed" for entry in result["checks"]):
         raise WorkerResultError("successful worker result cannot contain failed checks")
+    if result["status"] == "passed" and result["required_checks"]:
+        raise WorkerResultError("successful worker result cannot retain outstanding required_checks")
     for field in ("evidence", "registry_outcome"):
         if not isinstance(result[field], (str, list, dict)):
             raise WorkerResultError(f"worker result {field} must be structured or text")

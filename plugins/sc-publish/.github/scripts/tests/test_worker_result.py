@@ -53,6 +53,8 @@ def test_checks_and_required_checks_have_structured_entries_and_consistent_succe
         parse_fenced_result("```json\n" + json.dumps(result(required_checks=[{}])) + "\n```")
     with pytest.raises(WorkerResultError):
         parse_fenced_result("```json\n" + json.dumps(result(checks=[{"kind": "publish", "status": "failed"}])) + "\n```")
+    with pytest.raises(WorkerResultError, match="outstanding required_checks"):
+        parse_fenced_result("```json\n" + json.dumps(result(required_checks=[{"kind": "approval", "reason": "pending"}])) + "\n```")
 
 
 def test_nested_check_types_fail_closed_without_losing_valid_channels():
