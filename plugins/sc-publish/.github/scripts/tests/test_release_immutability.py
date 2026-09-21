@@ -104,7 +104,7 @@ def test_shared_workflow_admission_and_finalization_order():
     assert steps[-1].get("continue-on-error", False) is False
     preflight = yaml.safe_load((root / "release-preflight.yml").read_text())["jobs"]["preflight"]["steps"]
     prerequisite = next(s for s in preflight if s.get("id") == "immutable_releases")
-    assert prerequisite["env"]["GH_TOKEN"] == "${{ secrets.IMMUTABLE_RELEASES_READ_TOKEN }}"
+    assert prerequisite["env"]["GH_TOKEN"] == "${{ github.token }}"
     summary = preflight[-1]
     assert summary["env"]["IMMUTABLE_RELEASES"] == "${{ steps.immutable_releases.outcome }}"
     assert 'record immutable-releases "${IMMUTABLE_RELEASES}"' in summary["run"]

@@ -76,7 +76,7 @@ jobs:
         # secret and receive no unsupported API call.
         shell: bash
         env:
-          GH_TOKEN: ${{ secrets.IMMUTABLE_RELEASES_READ_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ steps.meta.outputs.release_tag }}
           REPLACE_ASSETS: ${{ inputs.replace_release_assets }}
         run: |
@@ -555,7 +555,7 @@ jobs:
         name: Recheck immutable release prerequisite before asset upload
         shell: bash
         env:
-          GH_TOKEN: ${{ secrets.IMMUTABLE_RELEASES_READ_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ needs.gate-and-tag.outputs.release_tag }}
         run: |
           result="$(python3 .github/scripts/release_immutability.py --tag "$RELEASE_TAG")"
