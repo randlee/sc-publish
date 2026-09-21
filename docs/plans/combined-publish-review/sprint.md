@@ -95,4 +95,4 @@ The read-only actual-input compare harness also passed for atm-core input SHA `2
 
 ### Normative compatibility rule
 
-The shared kit MUST NOT add generic crates.io/GitHub credential-liveness probes or require a new secret from existing consumers. `IMMUTABLE_RELEASES_READ_TOKEN` is strictly optional. When absent, workflows MUST skip the privileged Administration(read) audit without calling that endpoint; when explicitly configured, the workflow MAY perform the read-only audit with that token. Existing consumer inputs and channel contracts remain valid without rework.
+Do not block or ask about tokens unless preflight or publish fails.
