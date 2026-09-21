@@ -6,8 +6,6 @@ import os
 import re
 import subprocess
 import sys
-import tomllib
-from pathlib import Path
 
 
 class ImmutabilityError(RuntimeError):
@@ -84,38 +82,16 @@ def check(repository, tag, *, finalized=False, replace_assets=False, query=api):
     raise ImmutabilityError("indeterminate: release inventory pagination limit reached")
 
 
-def check_manifest_policy(manifest, repository, tag, **kwargs):
-    """Apply only the repository's explicitly opted-in immutable-release policy."""
-    try:
-        data = tomllib.loads(Path(manifest).read_text(encoding="utf-8"))
-    except (OSError, tomllib.TOMLDecodeError) as error:
-        raise ImmutabilityError("cannot read immutable-release policy manifest") from error
-    project = data.get("project", {})
-    if not isinstance(project, dict):
-        raise ImmutabilityError("project must be a table")
-    enabled = project.get("require_immutable_releases", False)
-    if type(enabled) is not bool:
-        raise ImmutabilityError("project.require_immutable_releases must be boolean")
-    if not enabled:
-        return {"policy": "not_required", "repository_enabled": None,
-                "release_state": "not_checked"}
-    return check(repository, tag, **kwargs)
-
-
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--repository", default=os.environ.get("GITHUB_REPOSITORY", ""))
-    parser.add_argument("--manifest", help="Use explicit project.require_immutable_releases policy; absent defaults to legacy behavior")
     parser.add_argument("--tag", required=True)
     parser.add_argument("--finalized", action="store_true")
     parser.add_argument("--replace-assets", action="store_true")
     args = parser.parse_args()
     tag = args.tag if args.tag.startswith("v") else "v" + args.tag
     try:
-        kwargs = dict(finalized=args.finalized, replace_assets=args.replace_assets)
-        result = (check_manifest_policy(args.manifest, args.repository, tag, **kwargs)
-                  if args.manifest else check(args.repository, tag, **kwargs))
-        print(json.dumps(result))
+        print(json.dumps(check(args.repository, tag, finalized=args.finalized, replace_assets=args.replace_assets)))
     except ImmutabilityError as error:
         print(f"Immutable release prerequisite failed: {error}", file=sys.stderr)
         return 1
