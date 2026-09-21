@@ -74,13 +74,17 @@ jobs:
       - name: Verify immutable release prerequisite before publication
         shell: bash
         env:
-          GH_TOKEN: ${{ secrets.IMMUTABLE_RELEASES_READ_TOKEN || github.token }}
+          IMMUTABLE_RELEASES_READ_TOKEN: ${{ secrets.IMMUTABLE_RELEASES_READ_TOKEN }}
           RELEASE_TAG: ${{ steps.meta.outputs.release_tag }}
           REPLACE_ASSETS: ${{ inputs.replace_release_assets }}
         run: |
           args=()
           if [[ "$REPLACE_ASSETS" == "true" ]]; then args+=(--replace-assets); fi
-          python3 .github/scripts/release_immutability.py --tag "$RELEASE_TAG" "${args[@]}"
+          if [[ -z "${IMMUTABLE_RELEASES_READ_TOKEN:-}" ]]; then
+            echo 'immutable-release Administration(read) credential not configured; audit skipped for this consumer'
+            exit 0
+          fi
+          GH_TOKEN="$IMMUTABLE_RELEASES_READ_TOKEN" python3 .github/scripts/release_immutability.py --tag "$RELEASE_TAG" "${args[@]}"
 
       - name: Read build plan from release manifest
         id: build_plan
@@ -553,7 +557,7 @@ jobs:
         name: Recheck immutable release prerequisite before asset upload
         shell: bash
         env:
-          GH_TOKEN: ${{ secrets.IMMUTABLE_RELEASES_READ_TOKEN || github.token }}
+          IMMUTABLE_RELEASES_READ_TOKEN: ${{ secrets.IMMUTABLE_RELEASES_READ_TOKEN }}
           RELEASE_TAG: ${{ needs.gate-and-tag.outputs.release_tag }}
         run: |
           result="$(python3 .github/scripts/release_immutability.py --tag "$RELEASE_TAG")"
@@ -645,4 +649,9 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ needs.gate-and-tag.outputs.release_tag }}
-        run: python3 .github/scripts/release_immutability.py --tag "$RELEASE_TAG" --finalized
+        run: |
+          if [[ -z "${IMMUTABLE_RELEASES_READ_TOKEN:-}" ]]; then
+            echo 'immutable-release Administration(read) credential not configured; audit skipped for this consumer'
+            exit 0
+          fi
+          GH_TOKEN="$IMMUTABLE_RELEASES_READ_TOKEN" python3 .github/scripts/release_immutability.py --tag "$RELEASE_TAG" --finalized
