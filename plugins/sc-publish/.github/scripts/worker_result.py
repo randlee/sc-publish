@@ -75,6 +75,7 @@ def validate_result(result: dict[str, Any]) -> dict[str, Any]:
         raise WorkerResultError("successful worker result cannot contain failed checks")
     if result["status"] == "passed" and result["required_checks"]:
         raise WorkerResultError("successful worker result cannot retain outstanding required_checks")
+    _reject_nested_credentials(result)
     for field in ("evidence", "registry_outcome"):
         if not isinstance(result[field], (str, list, dict)):
             raise WorkerResultError(f"worker result {field} must be structured or text")
@@ -87,6 +88,19 @@ def validate_result(result: dict[str, Any]) -> dict[str, Any]:
     if result["status"] not in {"passed", "apparently_available", "taken"} and not result["error"]:
         raise WorkerResultError("failed or blocked worker result must preserve error details")
     return result
+
+
+def _reject_nested_credentials(value: object, path: str = "result") -> None:
+    """Never accept credential-bearing nested evidence in a worker envelope."""
+    if isinstance(value, dict):
+        for key, child in value.items():
+            normalized = str(key).lower().replace("-", "_")
+            if normalized in {"token", "npm_token", "authorization", "password", "secret", "access_token"}:
+                raise WorkerResultError(f"worker result contains credential-bearing field at {path}.{key}")
+            _reject_nested_credentials(child, f"{path}.{key}")
+    elif isinstance(value, list):
+        for index, child in enumerate(value):
+            _reject_nested_credentials(child, f"{path}[{index}]")
 
 
 def aggregate_results(results: list[dict[str, Any] | None], expected_channels: list[str]) -> list[dict[str, Any]]:

@@ -47,7 +47,34 @@ def main():
         old = inspect(args.baseline_kit, source)
         new = inspect(args.candidate_kit, source)
         assert old[0] == new[0], f'{source}: rendered artifact manifest changed'
-        assert old[2] == new[2], f'{source}: runtime contract changed: {[k for k in old[2] if old[2][k] != new[2][k]]}'
+        changed = [k for k in old[2] if old[2][k] != new[2][k]]
+        # Credential preflight may add a new liveness probe for an existing
+        # root channel.  That is additive shared safety: preserve every
+        # existing field while allowing the candidate to require an explicit
+        # check that the older kit could not perform.
+        for command in changed:
+            if command != 'preflight-secret-plan':
+                raise AssertionError(f'{source}: runtime contract changed: {changed}')
+            before = old[2][command]
+            after = new[2][command]
+            before_plan, after_plan = json.loads(before), json.loads(after)
+            def without_liveness(value):
+                if isinstance(value, dict):
+                    return {
+                        key: without_liveness(item)
+                        for key, item in value.items()
+                        if key not in {'liveness_checks', 'liveness_channel_checks'}
+                    }
+                if isinstance(value, list):
+                    return [without_liveness(item) for item in value]
+                return value
+            assert without_liveness(after_plan) == without_liveness(before_plan), f'{source}: preflight contract changed non-liveness fields'
+            assert set(map(json.dumps, before_plan['liveness_checks'])).issubset(
+                map(json.dumps, after_plan['liveness_checks'])
+            )
+            assert set(map(json.dumps, before_plan['liveness_channel_checks'])).issubset(
+                map(json.dumps, after_plan['liveness_channel_checks'])
+            )
         assert all(new[1]['channels'][key] == value for key,value in old[1]['channels'].items()), f'{source}: existing channel contract changed'
         revision = subprocess.check_output(['git','-C',str(source.parent),'rev-parse','HEAD'],text=True).strip()
         print(json.dumps({'consumer_input':str(source), 'consumer_head':revision, 'input_sha256':hashlib.sha256(source.read_bytes()).hexdigest(), 'install_and_repeat_dry_run':'passed for baseline and candidate', 'unchanged':['rendered artifact manifest','all existing channel contracts',*old[2]]}))
