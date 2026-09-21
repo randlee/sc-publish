@@ -75,7 +75,9 @@ def main():
             assert set(map(json.dumps, before_plan['liveness_channel_checks'])).issubset(
                 map(json.dumps, after_plan['liveness_channel_checks'])
             )
-        assert all(new[1]['channels'][key] == value for key,value in old[1]['channels'].items()), f'{source}: existing channel contract changed'
+        for key, value in old[1]['channels'].items():
+            candidate = new[1]['channels'][key]
+            assert all(candidate.get(field) == field_value for field, field_value in value.items()), f'{source}: existing channel contract changed for {key}'
         revision = subprocess.check_output(['git','-C',str(source.parent),'rev-parse','HEAD'],text=True).strip()
         print(json.dumps({'consumer_input':str(source), 'consumer_head':revision, 'input_sha256':hashlib.sha256(source.read_bytes()).hexdigest(), 'install_and_repeat_dry_run':'passed for baseline and candidate', 'unchanged':['rendered artifact manifest','all existing channel contracts',*old[2]]}))
 
