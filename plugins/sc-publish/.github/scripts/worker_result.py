@@ -59,7 +59,7 @@ def validate_result(result: dict[str, Any]) -> dict[str, Any]:
             raise WorkerResultError(f"worker result {field} must be an array")
     if any(
         not isinstance(entry, dict) or not isinstance(entry.get("kind"), str) or not entry["kind"]
-        or entry.get("status") not in {"passed", "failed", "blocked"}
+        or not isinstance(entry.get("status"), str) or entry["status"] not in {"passed", "failed", "blocked"}
         for entry in result["checks"]
     ):
         raise WorkerResultError("worker result checks must contain kind and valid status")

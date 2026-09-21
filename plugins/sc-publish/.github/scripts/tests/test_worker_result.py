@@ -55,6 +55,15 @@ def test_checks_and_required_checks_have_structured_entries_and_consistent_succe
         parse_fenced_result("```json\n" + json.dumps(result(checks=[{"kind": "publish", "status": "failed"}])) + "\n```")
 
 
+def test_nested_check_types_fail_closed_without_losing_valid_channels():
+    values = aggregate_results(
+        [result(), {**result(), "channel": "pypi", "checks": [{"kind": "publish", "status": []}]}],
+        ["npm", "pypi"],
+    )
+    assert values[0]["status"] == "passed"
+    assert values[1]["error"]["code"] == "REPORTING.CONTRACT_FAILURE"
+
+
 @pytest.mark.parametrize("text", ["", "```json\n{}\n```", "```json\nnot-json\n```"])
 def test_missing_or_malformed_result_fails_closed(text):
     with pytest.raises(WorkerResultError):
