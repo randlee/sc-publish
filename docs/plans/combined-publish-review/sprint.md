@@ -21,21 +21,26 @@ publication, release mutation, or version bump is part of this task.
 The child contains substantive reporting fixes, not merely a documentation
 receipt. The scope limit applies to this child relative to PR104. Inherited
 PR101 immutable-release prerequisites remain intentionally in the stack under
-Solar's lead ruling; this child neither removes them nor claims to correct their
-Administration(read) permission concern.
+Solar's lead ruling; this child neither removes them nor claims to correct their inherited permission behavior.
+
+The sc-lint consumer/source-pin requirement is inherited from PR99
+(`be170540`); this child does not change that implementation. The independent
+npm publication path and organization-scope handling are inherited from the
+parent stack through PR104. This child strengthens their shared reporting and
+sanitization, rather than adding another publishing path.
 
 ## Implementation and disposition
 
 | Original item | Disposition and evidence |
 | --- | --- |
-| FIX01 | Implemented. `plugins/sc-publish/.github/scripts/worker_result.py` sanitizes nested result diagnostics; `npm_release.py` uses the shared sanitizer. Tests cover Basic/token/Bearer authorization, quoted JSON, command arguments, and nested fields while retaining useful errors. Substantive child commit: `a814e7f`. |
+| FIX01 | Implemented. `plugins/sc-publish/.github/scripts/worker_result.py` sanitizes nested result diagnostics; `npm_release.py` uses the shared sanitizer. Tests cover authorization-header variants, quoted JSON, command arguments, and nested fields while retaining useful errors. Substantive child commit: `a814e7f`. |
 | FIX02 | Implemented. `worker_result.py` rejects passed results with outstanding required checks; existing aggregation retains valid channel results and reports malformed results. Child commits `351d6fe` and `0d6d019`, with reporting tests. All seven channel agents inherit the shared reporting protocol. |
 | FIX03 | Deferred, not fixed by this child. The default renderer remains sc-compose 1.5.0. No claim that a 1.6.1 contract was added. |
 | FIX04 | Deferred, not fixed by this child. No generic preflight preparation/validation hook or opt-out was added. |
 | FIX05 | Deferred, not fixed by this child. Existing-tag source/build policy was not redesigned. |
 | FIX06 | Deferred, not fixed by this child. No root release concurrency mechanism was added. |
 | FIX07 | Inherited PR101 behavior, not a completed child correction or proof of admission before every registry write. |
-| FIX08 | Not fixed by this child. Inherited PR101 uses github.token for the Administration(read) probe. New credential-policy experiments were removed; no new secret requirement is introduced by this child. |
+| FIX08 | Inherited PR101 behavior; not changed or claimed by this child. |
 | FIX09 | Deferred, not fixed by this child. No new cross-channel draft/attestation lifecycle was implemented or live-qualified. |
 | FIX10 | Deferred, not fixed by this child. No new trusted workflow-ref policy was implemented. |
 | FIX11 | Validation evidence only; see below. Downstream adoption and joint approval remain separate outstanding work. |
@@ -61,7 +66,8 @@ Review: https://github.com/randlee/sc-publish/pull/106#issuecomment-5755139580
 The review requested correction of the prior receipt's false completion claims;
 it did not approve the PR.
 
-Cobs independently reported installation from that exact source into a temporary
+cobs@sc-obs reported installation (ATM message
+`01M311CWKAG1JY8EGN82K1XVCR`) from that exact source into a temporary
 consumer, repeat installer dry-run with no drift, and the installed suite:
 
 ```text
