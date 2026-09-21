@@ -70,7 +70,7 @@ FIX04 b685b6c, 006092a (manifest-aware preflight and consumer-independent instal
 FIX05 2c91d7b, 42e0fce (release-candidate provenance and stale renderer rejection)
 FIX06 36d6696, 72d787a (concurrent release convergence)
 FIX07 34feb1a (immutable release prerequisite admission)
-FIX08 cb29cb4, 917b5cf (credential validation and redaction)
+FIX08 cb29cb4, 917b5cf, 19632e2 (credential validation/redaction and explicit IMMUTABLE_RELEASES_READ_TOKEN for Administration(read))
 FIX09 a99c9a7, 0a6ceaa, 61568d8 (npm channel, recovery contracts, compatibility evidence)
 FIX10 2c91d7b, 34feb1a (provenance/ref and fail-closed dispatch gates)
 FIX11 b8d3a9a, 006092a, 61568d8 (installed consumer and portable preflight coverage)
@@ -91,4 +91,4 @@ exit 0; Publish-kit assets are in sync.
 
 The installed run used a generated consumer input with source-workspace-only sections removed, matching the CI workflow's isolated vendored-consumer fixture. This is premerge install/render evidence; it does not substitute for postmerge atm-core/sc-compose repository adoption or live release qualification. The current child head is `0d6d019` and includes substantive worker-result and diagnostic fixes above 917b5cf.
 
-The read-only actual-input compare harness also passed for atm-core input SHA `26ca2237a0e46ed14cc6dcd01d60ca1dbc45aad09be01141cfc53726735ac51b` (consumer HEAD `904673995c529017ce673c7957efa77176df61e4`) and sc-compose input SHA `97ec11ab3c8a9cc5ccff4ed69a97727969e80f4a3febc85eb36d53dc53f8ba2f` (consumer HEAD `b763d2ffdaf6941bd8b375dba4e77676e357169f`). Both baseline/candidate installs, repeat dry-runs, rendered manifests, existing channel contracts, and runtime matrices were preserved.
+The read-only actual-input compare harness also passed for atm-core input SHA `26ca2237a0e46ed14cc6dcd01d60ca1dbc45aad09be01141cfc53726735ac51b` (consumer HEAD `904673995c529017ce673c7957efa77176df61e4`) and sc-compose input SHA `97ec11ab3c8a9cc5ccff4ed69a97727969e80f4a3febc85eb36d53dc53f8ba2f` (consumer HEAD `b763d2ffdaf6941bd8b375dba4e77676e357169f`). Both baseline/candidate installs, repeat dry-runs, rendered manifests, existing channel contracts, and runtime matrices were preserved. Current child head: `19632e2`.
