@@ -60,7 +60,6 @@ sanitized diagnostics; redact credentials and sensitive values only.
   "status": "passed|failed|blocked|apparently_available|taken|indeterminate",
   "checks": [{"kind": "<check>", "status": "passed|failed|blocked"}],
   "required_checks": [{"kind": "<contract check not run>", "reason": "<sanitized reason>"}],
-  "verification": ["<non-secret fact>"],
   "sanitized_diagnostic": "<empty on success; complete redacted diagnostic on failure>"
 }
 ```
