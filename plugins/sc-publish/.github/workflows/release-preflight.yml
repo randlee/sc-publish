@@ -52,7 +52,10 @@ jobs:
         continue-on-error: true
         shell: bash
         env:
-          GH_TOKEN: ${{ secrets.IMMUTABLE_RELEASES_READ_TOKEN }}
+          # Consumers may provide an approved Administration(read) token;
+          # github.token remains a safe contents-read fallback and a 403 is
+          # reported as indeterminate rather than claimed as enabled.
+          GH_TOKEN: ${{ secrets.IMMUTABLE_RELEASES_READ_TOKEN || github.token }}
           RELEASE_VERSION: ${{ inputs.version }}
         run: python3 .github/scripts/release_immutability.py --tag "$RELEASE_VERSION"
 
