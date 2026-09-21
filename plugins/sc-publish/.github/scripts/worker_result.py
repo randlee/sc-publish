@@ -8,7 +8,7 @@ from typing import Any
 REQUIRED_FIELDS = {
     "channel", "status", "tag", "commit", "command", "exit_status",
     "error", "attempts", "workflow_url", "job_url", "evidence",
-    "registry_outcome", "verification", "sanitized_diagnostic",
+    "registry_outcome", "verification", "sanitized_diagnostic", "checks", "required_checks",
 }
 STATUSES = {"passed", "failed", "blocked", "apparently_available", "taken", "indeterminate"}
 _FENCE = re.compile(r"```(?:json)?\s*\n?(.*?)\n?```", re.DOTALL | re.IGNORECASE)
@@ -37,20 +37,28 @@ def validate_result(result: dict[str, Any]) -> dict[str, Any]:
         raise WorkerResultError("worker result missing required fields: " + ", ".join(missing))
     if not isinstance(result["channel"], str) or not result["channel"]:
         raise WorkerResultError("worker result channel must be a non-empty string")
-    if result["status"] not in STATUSES:
+    if not isinstance(result["status"], str) or result["status"] not in STATUSES:
         raise WorkerResultError("worker result has an invalid status")
     if not isinstance(result["tag"], str) or not result["tag"]:
         raise WorkerResultError("worker result tag must be present")
     if not isinstance(result["commit"], str) or not result["commit"]:
         raise WorkerResultError("worker result commit must be present")
-    if not isinstance(result["command"], list) or not all(isinstance(item, str) for item in result["command"]):
-        raise WorkerResultError("worker result command must be an argv array")
+    if not isinstance(result["command"], list) or not result["command"] or not all(isinstance(item, str) and item for item in result["command"]):
+        raise WorkerResultError("worker result command must be a non-empty argv array")
     if not isinstance(result["exit_status"], int):
         raise WorkerResultError("worker result exit_status must be an integer")
     if result["status"] == "passed" and result["exit_status"] != 0:
         raise WorkerResultError("successful worker result must have exit_status 0")
     if not isinstance(result["attempts"], int) or result["attempts"] < 1:
         raise WorkerResultError("worker result attempts must be a positive integer")
+    for field in ("workflow_url", "job_url"):
+        if not isinstance(result[field], str) or not result[field]:
+            raise WorkerResultError(f"worker result {field} must be a non-empty string")
+    for field in ("checks", "required_checks"):
+        if not isinstance(result[field], list):
+            raise WorkerResultError(f"worker result {field} must be an array")
+    if result["status"] == "passed" and not result["checks"]:
+        raise WorkerResultError("successful worker result must preserve observed checks")
     for field in ("evidence", "registry_outcome"):
         if not isinstance(result[field], (str, list, dict)):
             raise WorkerResultError(f"worker result {field} must be structured or text")
@@ -71,6 +79,8 @@ def aggregate_results(results: list[dict[str, Any] | None], expected_channels: l
     for channel, result in zip(expected_channels, results):
         if result is None:
             item = _contract_failure(channel, "missing worker result")
+        elif not isinstance(result, dict):
+            item = _contract_failure(channel, "worker result must be a JSON object")
         else:
             try:
                 item = validate_result(result)

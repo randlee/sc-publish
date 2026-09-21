@@ -14,6 +14,7 @@ def result(**overrides):
         "command": ["npm", "publish"], "exit_status": 0, "error": None, "attempts": 1,
         "workflow_url": "unavailable", "job_url": "unavailable", "evidence": ["run log"],
         "registry_outcome": "published", "verification": ["integrity matched"], "sanitized_diagnostic": "",
+        "checks": [{"kind": "publish", "status": "passed"}], "required_checks": [],
     }
     value.update(overrides)
     return value
@@ -34,6 +35,17 @@ def test_passed_nonzero_exit_is_a_contract_failure():
         parse_fenced_result("```json\n" + json.dumps(result(exit_status=1)) + "\n```")
 
 
+def test_passed_report_requires_checks_and_meaningful_provenance():
+    with pytest.raises(WorkerResultError):
+        incomplete = result()
+        del incomplete["checks"]
+        parse_fenced_result("```json\n" + json.dumps(incomplete) + "\n```")
+    with pytest.raises(WorkerResultError):
+        parse_fenced_result("```json\n" + json.dumps(result(workflow_url=None)) + "\n```")
+    with pytest.raises(WorkerResultError):
+        parse_fenced_result("```json\n" + json.dumps(result(command=[])) + "\n```")
+
+
 @pytest.mark.parametrize("text", ["", "```json\n{}\n```", "```json\nnot-json\n```"])
 def test_missing_or_malformed_result_fails_closed(text):
     with pytest.raises(WorkerResultError):
@@ -51,6 +63,14 @@ def test_aggregation_preserves_valid_channel_when_another_is_missing():
     values = aggregate_results([result(), None], ["npm", "pypi"])
     assert values[0]["status"] == "passed"
     assert values[1]["error"]["code"] == "REPORTING.CONTRACT_FAILURE"
+
+
+def test_aggregation_converts_malformed_objects_and_scalars_to_contract_failures():
+    values = aggregate_results([result(), {**result(), "channel": "pypi", "status": []}], ["npm", "pypi"])
+    assert values[0]["status"] == "passed"
+    assert values[1]["error"]["code"] == "REPORTING.CONTRACT_FAILURE"
+    scalar = aggregate_results(["not-an-object"], ["npm"])
+    assert scalar[0]["error"]["code"] == "REPORTING.CONTRACT_FAILURE"
 
 
 @pytest.mark.parametrize("status", ["apparently_available", "taken"])

@@ -118,7 +118,7 @@ def test_failed_publish_rechecks_registry_for_retry(release, accepted):
 
 def test_failed_publish_preserves_redacted_diagnostic(release):
     manifest, directory, _ = release
-    failed = subprocess.CompletedProcess([], 1, stdout="", stderr="upstream denied token=synthetic-secret Bearer bearer-secret")
+    failed = subprocess.CompletedProcess([], 1, stdout="", stderr="upstream denied token=synthetic-secret Bearer bearer-secret Authorization: Bearer auth-secret")
     with patch.object(npm, "registry_version", side_effect=[None, None]), patch.object(npm.subprocess, "run", return_value=failed):
         with pytest.raises(RuntimeError) as error:
             npm.publish(manifest, "v1.2.3", directory, dry_run=False)
@@ -127,7 +127,9 @@ def test_failed_publish_preserves_redacted_diagnostic(release):
     assert "upstream denied" in message
     assert "synthetic-secret" not in message
     assert "bearer-secret" not in message
+    assert "auth-secret" not in message
     assert "Bearer <redacted>" in message
+    assert "Authorization=<redacted>" in message
 
 
 def test_failed_publish_preserves_stdout_and_stderr(release):

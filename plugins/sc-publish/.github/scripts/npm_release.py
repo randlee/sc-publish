@@ -19,13 +19,15 @@ import urllib.request
 from release_manifest import load_manifest
 
 REGISTRY = "https://registry.npmjs.org"
-_SENSITIVE = re.compile(r"(?i)(?:npm[_-]?token|token|authorization)\s*[:=]\s*[^\s,;]+|bearer\s+[^\s,;]+")
+_SENSITIVE = re.compile(r"(?i)authorization\s*:\s*bearer\s+[^\s,;]+|(?:npm[_-]?token|token|authorization)\s*[:=]\s*[^\s,;]+|bearer\s+[^\s,;]+")
 
 
 def _safe_diagnostic(value: bytes | str | None) -> str:
     text = value.decode("utf-8", "replace") if isinstance(value, bytes) else (value or "")
     def redact(match: re.Match[str]) -> str:
         value = match.group(0)
+        if value.lower().startswith("authorization"):
+            return "Authorization=<redacted>"
         if value.lower().startswith("bearer "):
             return "Bearer <redacted>"
         return value.split("=")[0].split(":")[0] + "=<redacted>"
