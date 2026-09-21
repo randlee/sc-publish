@@ -49,6 +49,8 @@ jobs:
 
       - id: immutable_releases
         name: Verify immutable release prerequisite (read-only)
+        # The Administration(read) audit is opt-in. Existing consumers must
+        # not need a new secret or receive an unsupported API call.
         continue-on-error: true
         shell: bash
         env:

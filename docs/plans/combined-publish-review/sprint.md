@@ -92,3 +92,7 @@ exit 0; Publish-kit assets are in sync.
 The installed run used a generated consumer input with source-workspace-only sections removed, matching the CI workflow's isolated vendored-consumer fixture. This is premerge install/render evidence; it does not substitute for postmerge atm-core/sc-compose repository adoption or live release qualification. The current child head is `0d6d019` and includes substantive worker-result and diagnostic fixes above 917b5cf.
 
 The read-only actual-input compare harness also passed for atm-core input SHA `26ca2237a0e46ed14cc6dcd01d60ca1dbc45aad09be01141cfc53726735ac51b` (consumer HEAD `904673995c529017ce673c7957efa77176df61e4`) and sc-compose input SHA `97ec11ab3c8a9cc5ccff4ed69a97727969e80f4a3febc85eb36d53dc53f8ba2f` (consumer HEAD `b763d2ffdaf6941bd8b375dba4e77676e357169f`). Both baseline/candidate installs, repeat dry-runs, rendered manifests, existing channel contracts, and runtime matrices were preserved. Current child head: `19632e2`.
+
+### Normative compatibility rule
+
+The shared kit MUST NOT add generic crates.io/GitHub credential-liveness probes or require a new secret from existing consumers. `IMMUTABLE_RELEASES_READ_TOKEN` is strictly optional. When absent, workflows MUST skip the privileged Administration(read) audit without calling that endpoint; when explicitly configured, the workflow MAY perform the read-only audit with that token. Existing consumer inputs and channel contracts remain valid without rework.

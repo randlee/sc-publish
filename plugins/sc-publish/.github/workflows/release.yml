@@ -72,6 +72,8 @@ jobs:
           echo "release_target=$target" >> "$GITHUB_OUTPUT"
 
       - name: Verify immutable release prerequisite before publication
+        # The privileged audit is opt-in; existing consumers need no new
+        # secret and receive no unsupported API call.
         shell: bash
         env:
           IMMUTABLE_RELEASES_READ_TOKEN: ${{ secrets.IMMUTABLE_RELEASES_READ_TOKEN }}
@@ -645,6 +647,8 @@ jobs:
             release/*
 
       - name: Verify finalized release immutability before downstream publication
+        # The privileged audit is opt-in; existing consumers need no new
+        # secret and receive no unsupported API call.
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
