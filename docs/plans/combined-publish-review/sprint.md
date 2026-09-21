@@ -70,7 +70,7 @@ FIX04 b685b6c, 006092a (manifest-aware preflight and consumer-independent instal
 FIX05 2c91d7b, 42e0fce (release-candidate provenance and stale renderer rejection)
 FIX06 36d6696, 72d787a (concurrent release convergence)
 FIX07 34feb1a (immutable release prerequisite admission)
-FIX08 cb29cb4, 917b5cf, 19632e2 (credential validation/redaction and optional IMMUTABLE_RELEASES_READ_TOKEN for Administration(read), with safe github.token fallback and indeterminate 403 handling)
+FIX08 cb29cb4, 917b5cf, 19632e2 (credential validation/redaction and explicit IMMUTABLE_RELEASES_READ_TOKEN for Administration(read))
 FIX09 a99c9a7, 0a6ceaa, 61568d8 (npm channel, recovery contracts, compatibility evidence)
 FIX10 2c91d7b, 34feb1a (provenance/ref and fail-closed dispatch gates)
 FIX11 b8d3a9a, 006092a, 61568d8 (installed consumer and portable preflight coverage)
