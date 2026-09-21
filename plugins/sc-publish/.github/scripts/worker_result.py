@@ -57,8 +57,22 @@ def validate_result(result: dict[str, Any]) -> dict[str, Any]:
     for field in ("checks", "required_checks"):
         if not isinstance(result[field], list):
             raise WorkerResultError(f"worker result {field} must be an array")
+    if any(
+        not isinstance(entry, dict) or not isinstance(entry.get("kind"), str) or not entry["kind"]
+        or entry.get("status") not in {"passed", "failed", "blocked"}
+        for entry in result["checks"]
+    ):
+        raise WorkerResultError("worker result checks must contain kind and valid status")
+    if any(
+        not isinstance(entry, dict) or not isinstance(entry.get("kind"), str) or not entry["kind"]
+        or not isinstance(entry.get("reason"), str) or not entry["reason"]
+        for entry in result["required_checks"]
+    ):
+        raise WorkerResultError("worker result required_checks must contain kind and reason")
     if result["status"] == "passed" and not result["checks"]:
         raise WorkerResultError("successful worker result must preserve observed checks")
+    if result["status"] == "passed" and any(entry["status"] != "passed" for entry in result["checks"]):
+        raise WorkerResultError("successful worker result cannot contain failed checks")
     for field in ("evidence", "registry_outcome"):
         if not isinstance(result[field], (str, list, dict)):
             raise WorkerResultError(f"worker result {field} must be structured or text")
@@ -97,8 +111,9 @@ def aggregate_results(results: list[dict[str, Any] | None], expected_channels: l
 def _contract_failure(channel: str, detail: str) -> dict[str, Any]:
     return {
         "channel": channel, "status": "failed", "tag": "unavailable", "commit": "unavailable",
-        "command": [], "exit_status": -1, "error": {"code": "REPORTING.CONTRACT_FAILURE", "message": detail},
+        "command": ["worker-result-validation"], "exit_status": -1, "error": {"code": "REPORTING.CONTRACT_FAILURE", "message": detail},
         "attempts": 1, "workflow_url": "unavailable", "job_url": "unavailable",
         "evidence": "worker response envelope", "registry_outcome": "unavailable",
         "verification": [], "sanitized_diagnostic": detail,
+        "checks": [{"kind": "worker_result_contract", "status": "failed"}], "required_checks": [],
     }
