@@ -116,6 +116,18 @@ def test_failed_publish_rechecks_registry_for_retry(release, accepted):
                 npm.publish(manifest, "v1.2.3", directory, dry_run=False)
 
 
+def test_failed_publish_preserves_redacted_diagnostic(release):
+    manifest, directory, _ = release
+    failed = subprocess.CompletedProcess([], 1, stdout="npm ERR! token=synthetic-secret", stderr="upstream denied")
+    with patch.object(npm, "registry_version", side_effect=[None, None]), patch.object(npm.subprocess, "run", return_value=failed):
+        with pytest.raises(RuntimeError) as error:
+            npm.publish(manifest, "v1.2.3", directory, dry_run=False)
+    message = str(error.value)
+    assert "NPM.PUBLISH_FAILED" in message
+    assert "upstream denied" in message
+    assert "synthetic-secret" not in message
+
+
 @pytest.mark.parametrize("code", [401, 403, 429, 500])
 def test_registry_errors_not_absence(code):
     error = urllib.error.HTTPError("https://registry.npmjs.org", code, "error", {}, None)
