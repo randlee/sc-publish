@@ -128,6 +128,21 @@ def test_failed_publish_preserves_redacted_diagnostic(release):
     assert "synthetic-secret" not in message
 
 
+def test_failed_publish_preserves_npm_scope_not_found_diagnostic(release):
+    manifest, directory, _ = release
+    failed = subprocess.CompletedProcess(
+        [], 1, stdout="",
+        stderr="npm error code E404\\nnpm error 404 PUT https://registry.npmjs.org/@sc-observability%2fclient - Scope not found",
+    )
+    with patch.object(npm, "registry_version", side_effect=[None, None]), patch.object(npm.subprocess, "run", return_value=failed):
+        with pytest.raises(RuntimeError) as error:
+            npm.publish(manifest, "v1.2.3", directory, dry_run=False)
+    message = str(error.value)
+    assert "E404" in message
+    assert "Scope not found" in message
+    assert "registry.npmjs.org/@sc-observability%2fclient" in message
+
+
 @pytest.mark.parametrize("code", [401, 403, 429, 500])
 def test_registry_errors_not_absence(code):
     error = urllib.error.HTTPError("https://registry.npmjs.org", code, "error", {}, None)
