@@ -562,7 +562,12 @@ jobs:
           IMMUTABLE_RELEASES_READ_TOKEN: ${{ secrets.IMMUTABLE_RELEASES_READ_TOKEN }}
           RELEASE_TAG: ${{ needs.gate-and-tag.outputs.release_tag }}
         run: |
-          result="$(python3 .github/scripts/release_immutability.py --tag "$RELEASE_TAG")"
+          if [[ -z "${IMMUTABLE_RELEASES_READ_TOKEN:-}" ]]; then
+            echo 'immutable-release Administration(read) credential not configured; audit skipped for this consumer'
+            echo 'state=skipped' >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          result="$(GH_TOKEN="$IMMUTABLE_RELEASES_READ_TOKEN" python3 .github/scripts/release_immutability.py --tag "$RELEASE_TAG")"
           echo "state=$(jq -r '.release_state' <<<"$result")" >> "$GITHUB_OUTPUT"
 
       - id: expected_assets
@@ -651,7 +656,7 @@ jobs:
         # secret and receive no unsupported API call.
         shell: bash
         env:
-          GH_TOKEN: ${{ github.token }}
+          IMMUTABLE_RELEASES_READ_TOKEN: ${{ secrets.IMMUTABLE_RELEASES_READ_TOKEN }}
           RELEASE_TAG: ${{ needs.gate-and-tag.outputs.release_tag }}
         run: |
           if [[ -z "${IMMUTABLE_RELEASES_READ_TOKEN:-}" ]]; then
