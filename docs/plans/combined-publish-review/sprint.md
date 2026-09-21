@@ -64,7 +64,7 @@ The child PR is intentionally a receipt/stack-registration layer; the substantiv
 
 ```text
 FIX01 917b5cf (quoted JSON and nested credential redaction)
-FIX02 eceb0ef, fd2d61e, 87b03f8, 4d50017, 9529052, 0139eec (worker envelope validation/aggregation)
+FIX02 eceb0ef, fd2d61e, 87b03f8, 4d50017, 9529052, 0139eec, 351d6fe (worker envelope validation/aggregation; reject passed results with pending required checks)
 FIX03 54aaf58, 7ba777b (renderer pin and compatibility)
 FIX04 b685b6c, 006092a (manifest-aware preflight and consumer-independent installed checks)
 FIX05 2c91d7b, 42e0fce (release-candidate provenance and stale renderer rejection)
@@ -89,4 +89,4 @@ install.py --dry-run against the same consumer
 exit 0; Publish-kit assets are in sync.
 ```
 
-The installed run used a generated consumer input with source-workspace-only sections removed, matching the CI workflow's isolated vendored-consumer fixture. This is premerge install/render evidence; it does not substitute for postmerge atm-core/sc-compose repository adoption or live release qualification.
+The installed run used a generated consumer input with source-workspace-only sections removed, matching the CI workflow's isolated vendored-consumer fixture. This is premerge install/render evidence; it does not substitute for postmerge atm-core/sc-compose repository adoption or live release qualification. The current child head is `351d6fe` and includes the substantive worker-result fix above 917b5cf.
