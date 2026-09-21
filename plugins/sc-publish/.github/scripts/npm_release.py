@@ -113,9 +113,11 @@ def validate_sources(manifest, release_version, source_ref=None):
             lock_data = json.loads(subprocess.check_output(["git", "show", f"{source_ref}:{lock_path.as_posix()}"], text=True))
         else:
             lock_data = json.loads(lock_path.read_text())
+        if lock_data.get("name") != entry["name"] or lock_data.get("version") != release_version:
+            raise ValueError(f"source npm lockfile {lock_path}: top-level identity/version mismatch")
         root = lock_data.get("packages", {}).get("", {})
         if root.get("name") != entry["name"] or root.get("version") != release_version:
-            raise ValueError(f"source npm lockfile {lock_path}: identity/version mismatch")
+            raise ValueError(f"source npm lockfile {lock_path}: packages root identity/version mismatch")
 
 
 def check_release_source(manifest_path, tag, source_ref=None):
