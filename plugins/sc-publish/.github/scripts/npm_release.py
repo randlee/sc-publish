@@ -19,7 +19,7 @@ import urllib.request
 from release_manifest import load_manifest
 
 REGISTRY = "https://registry.npmjs.org"
-_SENSITIVE = re.compile(r"(?i)authorization\s*:\s*bearer\s+[^\s,;]+|(?:npm[_-]?token|token|authorization)\s*[:=]\s*[^\s,;]+|bearer\s+[^\s,;]+")
+_SENSITIVE = re.compile(r"(?i)authorization\s*:\s*(?:basic|token|bearer)\s+[^\s,;]+|(?:npm[_-]?token|token|authorization)\s*[:=]\s*[^\s,;]+|bearer\s+[^\s,;]+")
 _SENSITIVE_JSON = re.compile(
     r'''(?i)(["'](?:npm[_-]?token|token|authorization)["']\s*:\s*)["'](?:\\.|[^"'\\])*["']'''
 )
