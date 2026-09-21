@@ -17,25 +17,12 @@ import urllib.parse
 import urllib.request
 
 from release_manifest import load_manifest
+from worker_result import redact_diagnostic
 
 REGISTRY = "https://registry.npmjs.org"
-_SENSITIVE = re.compile(r"(?i)authorization\s*:\s*(?:basic|token|bearer)\s+[^\s,;]+|(?:npm[_-]?token|token|authorization)\s*[:=]\s*[^\s,;]+|bearer\s+[^\s,;]+")
-_SENSITIVE_JSON = re.compile(
-    r'''(?i)(["'](?:npm[_-]?token|token|authorization)["']\s*:\s*)["'](?:\\.|[^"'\\])*["']'''
-)
-
-
 def _safe_diagnostic(value: bytes | str | None) -> str:
     text = value.decode("utf-8", "replace") if isinstance(value, bytes) else (value or "")
-    text = _SENSITIVE_JSON.sub(r'\1"<redacted>"', text)
-    def redact(match: re.Match[str]) -> str:
-        value = match.group(0)
-        if value.lower().startswith("authorization"):
-            return "Authorization=<redacted>"
-        if value.lower().startswith("bearer "):
-            return "Bearer <redacted>"
-        return value.split("=")[0].split(":")[0] + "=<redacted>"
-    return _SENSITIVE.sub(redact, text) or "<no diagnostic output>"
+    return redact_diagnostic(text) or "<no diagnostic output>"
 
 
 def packages(manifest):

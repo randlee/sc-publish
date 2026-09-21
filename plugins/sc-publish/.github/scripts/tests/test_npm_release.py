@@ -374,3 +374,10 @@ def test_npm_checks_precede_tag_creation_and_registry_jobs():
     for name in ['build-npm','publish']:
         needs = workflow['jobs'][name]['needs']
         assert needs == 'gate-and-tag' or 'gate-and-tag' in needs
+
+
+@pytest.mark.parametrize('scheme', ['Basic', 'token', 'Bearer'])
+def test_diagnostic_redacts_entire_authorization_value(scheme):
+    text = npm._safe_diagnostic(f'Authorization: {scheme} SYNTHETIC_SECRET\nE403 permission denied')
+    assert 'SYNTHETIC_SECRET' not in text
+    assert 'E403 permission denied' in text

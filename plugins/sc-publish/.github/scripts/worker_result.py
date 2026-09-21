@@ -14,6 +14,42 @@ STATUSES = {"passed", "failed", "blocked", "apparently_available", "taken", "ind
 _FENCE = re.compile(r"```(?:json)?\s*\n?(.*?)\n?```", re.DOTALL | re.IGNORECASE)
 
 
+_SECRET_KEY = re.compile(r"(?i)(?:authorization|(?:.*[_-])?(?:token|password|secret|api[_-]?key)|_auth)")
+_SECRET_JSON = re.compile(
+    r'''(?i)(["'](?:authorization|(?:[\w-]*[_-])?(?:token|password|secret|api[_-]?key)|_auth)["']\s*:\s*)["'](?:\\.|[^"'\\])*["']'''
+)
+_AUTH_HEADER = re.compile(r"(?i)authorization\s*[:=]\s*(?:(?:basic|bearer|token)\s+)?[^\s,;]+")
+_SECRET_ASSIGNMENT = re.compile(r"(?i)\b((?:[\w-]*[_-])?(?:token|password|secret|api[_-]?key)|_auth)\s*[:=]\s*[^\s,;]+")
+_BEARER = re.compile(r"(?i)\bbearer\s+[^\s,;]+")
+_SECRET_ARG = re.compile(r"(?i)(--(?:[\w-]*-)?(?:token|password|secret|api-key)\s+)[^\s,;]+")
+
+
+def redact_diagnostic(text: str) -> str:
+    """Redact credential syntax while preserving useful non-secret diagnostics."""
+    text = _SECRET_JSON.sub(r'\1"<redacted>"', text)
+    text = _AUTH_HEADER.sub("Authorization=<redacted>", text)
+    text = _SECRET_ASSIGNMENT.sub(r"\1=<redacted>", text)
+    text = _BEARER.sub("Bearer <redacted>", text)
+    return _SECRET_ARG.sub(r"\1<redacted>", text)
+
+
+def redact_result(value: Any) -> Any:
+    """Copy and sanitize every nested report field before returning it to callers."""
+    if isinstance(value, dict):
+        return {key: "<redacted>" if isinstance(key, str) and _SECRET_KEY.fullmatch(key)
+                else redact_result(item) for key, item in value.items()}
+    if isinstance(value, list):
+        sanitized = []
+        hide_next = False
+        for item in value:
+            sanitized.append("<redacted>" if hide_next else redact_result(item))
+            hide_next = isinstance(item, str) and item.startswith("--") and bool(_SECRET_KEY.fullmatch(item[2:]))
+        return sanitized
+    if isinstance(value, str):
+        return redact_diagnostic(value)
+    return value
+
+
 class WorkerResultError(ValueError):
     """A missing, malformed, incomplete, or inconsistent worker result."""
 
@@ -32,6 +68,7 @@ def parse_fenced_result(text: str) -> dict[str, Any]:
 
 
 def validate_result(result: dict[str, Any]) -> dict[str, Any]:
+    result = redact_result(result)
     missing = sorted(REQUIRED_FIELDS - result.keys())
     if missing:
         raise WorkerResultError("worker result missing required fields: " + ", ".join(missing))
