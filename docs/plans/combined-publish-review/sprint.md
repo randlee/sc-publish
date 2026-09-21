@@ -63,8 +63,8 @@ The repository-wide `pytest -q` collection is not a valid aggregate command beca
 The child PR is intentionally a receipt/stack-registration layer; the substantive implementation is distributed across its reviewed parent stack. The relevant commit ledger is:
 
 ```text
-FIX01 917b5cf (quoted JSON and nested credential redaction)
-FIX02 eceb0ef, fd2d61e, 87b03f8, 4d50017, 9529052, 0139eec, 351d6fe (worker envelope validation/aggregation; reject passed results with pending required checks)
+FIX01 917b5cf, a814e7f (quoted JSON, full diagnostic and nested credential redaction)
+FIX02 eceb0ef, fd2d61e, 87b03f8, 4d50017, 9529052, 0139eec, 351d6fe, 0d6d019 (worker envelope validation/aggregation; reject passed results with pending required checks)
 FIX03 54aaf58, 7ba777b (renderer pin and compatibility)
 FIX04 b685b6c, 006092a (manifest-aware preflight and consumer-independent installed checks)
 FIX05 2c91d7b, 42e0fce (release-candidate provenance and stale renderer rejection)
@@ -89,4 +89,6 @@ install.py --dry-run against the same consumer
 exit 0; Publish-kit assets are in sync.
 ```
 
-The installed run used a generated consumer input with source-workspace-only sections removed, matching the CI workflow's isolated vendored-consumer fixture. This is premerge install/render evidence; it does not substitute for postmerge atm-core/sc-compose repository adoption or live release qualification. The current child head is `351d6fe` and includes the substantive worker-result fix above 917b5cf.
+The installed run used a generated consumer input with source-workspace-only sections removed, matching the CI workflow's isolated vendored-consumer fixture. This is premerge install/render evidence; it does not substitute for postmerge atm-core/sc-compose repository adoption or live release qualification. The current child head is `0d6d019` and includes substantive worker-result and diagnostic fixes above 917b5cf.
+
+The read-only actual-input compare harness also passed for atm-core input SHA `26ca2237a0e46ed14cc6dcd01d60ca1dbc45aad09be01141cfc53726735ac51b` (consumer HEAD `904673995c529017ce673c7957efa77176df61e4`) and sc-compose input SHA `97ec11ab3c8a9cc5ccff4ed69a97727969e80f4a3febc85eb36d53dc53f8ba2f` (consumer HEAD `b763d2ffdaf6941bd8b375dba4e77676e357169f`). Both baseline/candidate installs, repeat dry-runs, rendered manifests, existing channel contracts, and runtime matrices were preserved.
