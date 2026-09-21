@@ -305,3 +305,28 @@ Rollout checklist, per consumer (not performed by this change):
   Require a successful immutability check, not merely an admin's earlier result.
 - Review the consumer PR before adoption. Publication is a separate authorization;
   verify final `immutable:true` before authorizing post-release channels.
+
+### Optional repository immutability audit
+
+Existing consumers retain their publishing behavior without new secrets. To opt
+into the repository-setting audit, declare `project.require_immutable_releases`
+as `true` in the installer JSON input. The generated artifact manifest retains
+that boolean. Absent or false means the added audit reports `not_required`,
+without making an Administration API request; it does not assert that the
+repository or release is immutable. Independent channel artifact verification
+continues unchanged.
+
+Opted-in consumers may supply the GitHub Actions secret
+`IMMUTABLE_RELEASES_READ_TOKEN` with repository Administration(read) and release
+read access. The workflow otherwise uses `github.token`; insufficient permission
+remains a visible, fail-closed indeterminate result. The secret is referenced only
+at runtime, never stored in the manifest. No generic token-expiration or new
+registry liveness checks are introduced by this option.
+
+Credential-expiry interviews and generic credential-readiness expansion are
+**not gates** for this change. Publishers must not ask consumers to assess
+crates.io/GitHub token expiry, introduce generic token-liveness questions, or
+require new secrets for established channels. Existing proven credential
+behavior is accepted by design. Only an explicitly configured immutable audit
+adds its Administration(read) check; absent opt-in is not a failed readiness
+check. Broader credential lifecycle work is deferred and out of scope.

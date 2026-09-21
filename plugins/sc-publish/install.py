@@ -151,6 +151,9 @@ def load_install_values(path: Path) -> dict[str, object]:
         if field in project:
             _require_string(project[field], f"project.{field}")
 
+    if "require_immutable_releases" in project and type(project["require_immutable_releases"]) is not bool:
+        raise argparse.ArgumentTypeError("project.require_immutable_releases must be boolean")
+
     if "sc_lint_source_revision" in project:
         revision = _require_string(project["sc_lint_source_revision"], "project.sc_lint_source_revision")
         if not re.fullmatch(r"[0-9a-f]{40}", revision):
@@ -416,6 +419,7 @@ def template_values(values: dict[str, object]) -> dict[str, object]:
     template_project.setdefault("workspace_toml", "")
     template_project.setdefault("rust_toolchain", "")
     template_project.setdefault("sc_lint_source_revision", "")
+    template_project.setdefault("require_immutable_releases", False)
 
     return {
         "schema_version": _toml_literal(values["schema_version"]),
@@ -441,6 +445,7 @@ def template_values(values: dict[str, object]) -> dict[str, object]:
         "has_workspace_toml": "workspace_toml" in project,
         "has_rust_toolchain": "rust_toolchain" in project,
         "has_sc_lint_source_revision": "sc_lint_source_revision" in project,
+        "has_immutable_release_policy": "require_immutable_releases" in project,
         **{f"has_channel_{name}": name in channels for name in CHANNEL_NAMES},
     }
 

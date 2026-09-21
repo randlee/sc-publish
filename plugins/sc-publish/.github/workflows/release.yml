@@ -72,21 +72,15 @@ jobs:
           echo "release_target=$target" >> "$GITHUB_OUTPUT"
 
       - name: Verify immutable release prerequisite before publication
-        # The privileged audit is opt-in; existing consumers need no new
-        # secret and receive no unsupported API call.
         shell: bash
         env:
-          IMMUTABLE_RELEASES_READ_TOKEN: ${{ secrets.IMMUTABLE_RELEASES_READ_TOKEN }}
+          GH_TOKEN: ${{ secrets.IMMUTABLE_RELEASES_READ_TOKEN || github.token }}
           RELEASE_TAG: ${{ steps.meta.outputs.release_tag }}
           REPLACE_ASSETS: ${{ inputs.replace_release_assets }}
         run: |
           args=()
           if [[ "$REPLACE_ASSETS" == "true" ]]; then args+=(--replace-assets); fi
-          if [[ -z "${IMMUTABLE_RELEASES_READ_TOKEN:-}" ]]; then
-            echo 'immutable-release Administration(read) credential not configured; audit skipped for this consumer'
-            exit 0
-          fi
-          GH_TOKEN="$IMMUTABLE_RELEASES_READ_TOKEN" python3 .github/scripts/release_immutability.py --tag "$RELEASE_TAG" "${args[@]}"
+          python3 .github/scripts/release_immutability.py --manifest "$RELEASE_ARTIFACT_MANIFEST" --tag "$RELEASE_TAG" "${args[@]}"
 
       - name: Read build plan from release manifest
         id: build_plan
@@ -559,15 +553,10 @@ jobs:
         name: Recheck immutable release prerequisite before asset upload
         shell: bash
         env:
-          IMMUTABLE_RELEASES_READ_TOKEN: ${{ secrets.IMMUTABLE_RELEASES_READ_TOKEN }}
+          GH_TOKEN: ${{ secrets.IMMUTABLE_RELEASES_READ_TOKEN || github.token }}
           RELEASE_TAG: ${{ needs.gate-and-tag.outputs.release_tag }}
         run: |
-          if [[ -z "${IMMUTABLE_RELEASES_READ_TOKEN:-}" ]]; then
-            echo 'immutable-release Administration(read) credential not configured; audit skipped for this consumer'
-            echo 'state=skipped' >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-          result="$(GH_TOKEN="$IMMUTABLE_RELEASES_READ_TOKEN" python3 .github/scripts/release_immutability.py --tag "$RELEASE_TAG")"
+          result="$(python3 .github/scripts/release_immutability.py --manifest "$RELEASE_ARTIFACT_MANIFEST" --tag "$RELEASE_TAG")"
           echo "state=$(jq -r '.release_state' <<<"$result")" >> "$GITHUB_OUTPUT"
 
       - id: expected_assets
@@ -652,15 +641,8 @@ jobs:
             release/*
 
       - name: Verify finalized release immutability before downstream publication
-        # The privileged audit is opt-in; existing consumers need no new
-        # secret and receive no unsupported API call.
         shell: bash
         env:
-          IMMUTABLE_RELEASES_READ_TOKEN: ${{ secrets.IMMUTABLE_RELEASES_READ_TOKEN }}
+          GH_TOKEN: ${{ secrets.IMMUTABLE_RELEASES_READ_TOKEN || github.token }}
           RELEASE_TAG: ${{ needs.gate-and-tag.outputs.release_tag }}
-        run: |
-          if [[ -z "${IMMUTABLE_RELEASES_READ_TOKEN:-}" ]]; then
-            echo 'immutable-release Administration(read) credential not configured; audit skipped for this consumer'
-            exit 0
-          fi
-          GH_TOKEN="$IMMUTABLE_RELEASES_READ_TOKEN" python3 .github/scripts/release_immutability.py --tag "$RELEASE_TAG" --finalized
+        run: python3 .github/scripts/release_immutability.py --manifest "$RELEASE_ARTIFACT_MANIFEST" --tag "$RELEASE_TAG" --finalized

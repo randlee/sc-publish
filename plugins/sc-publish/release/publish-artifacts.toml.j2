@@ -14,6 +14,8 @@ required_variables:
   - project.renderer_archive_path
   - project.workspace_toml
   - project.rust_toolchain
+  - project.require_immutable_releases
+  - has_immutable_release_policy
   - project.sc_lint_source_revision
   - release_targets
   - crates
@@ -60,6 +62,9 @@ required_variables:
 schema_version = {{ schema_version }}
 
 [project]
+{% if has_immutable_release_policy %}
+require_immutable_releases = {{ project.require_immutable_releases }}
+{% endif %}
 name = {{ project.name }}
 archive_prefix = {{ project.archive_prefix }}
 description = {{ project.description }}
