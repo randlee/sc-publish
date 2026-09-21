@@ -125,7 +125,7 @@ Declare `npm_packages` (optional, defaults to empty) together with `channels.npm
 
 ```json
 {
-  "npm_packages": [{"name": "@example/client", "source": "bindings/typescript"}],
+  "npm_packages": [{"name": "@synaptic-canvas/sc-observability", "source": "bindings/typescript"}],
   "channels": {
     "npm": {"workflow": "npm-publish.yml", "dispatch_inputs": {"dry_run": "false"}}
   }
@@ -134,7 +134,12 @@ Declare `npm_packages` (optional, defaults to empty) together with `channels.npm
 
 Merge this fragment into the complete installer input. Do not declare npm as an
 `enabled` flag. Each source must have a committed `package-lock.json` and public
-`package.json` whose name and version match the release tag (without `v`). The
+`package.json` and root `package-lock.json` whose name and version match the
+manifest and release tag (without `v`). Scoped packages in one manifest must
+share one scope; the scope is manifest-owned and is never inferred or renamed
+by the shared kit. For example, the recovered
+`@synaptic-canvas/sc-observability@1.4.1` publication is evidence for that
+specific manifest identity, not a default organization for other consumers. The
 pre-tag lockstep gate validates every declared npm package name/version and
 public publication settings; an additional gate reads the exact resolved release
 commit before creating its tag. The release build runs `npm ci`, `npm run build --if-present`, and `npm pack

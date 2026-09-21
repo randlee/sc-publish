@@ -38,6 +38,7 @@ def packages(manifest):
     entries = manifest.get("npm_packages", [])
     names = set()
     assets = set()
+    scopes = set()
     for entry in entries:
         name, source = entry["name"], Path(entry["source"])
         if not re.fullmatch(r"(?:@[a-z0-9][a-z0-9._-]*/)?[a-z0-9][a-z0-9._-]*", name):
@@ -47,6 +48,10 @@ def packages(manifest):
             raise ValueError("duplicate npm package or unsafe source path")
         names.add(name)
         assets.add(asset)
+        if name.startswith("@"):
+            scopes.add(name.split("/", 1)[0])
+    if len(scopes) > 1:
+        raise ValueError("npm packages must use one consistent scope")
     if bool(entries) != ("npm" in manifest.get("channels", {})):
         raise ValueError("npm_packages and channels.npm must be declared together")
     return entries
@@ -96,12 +101,21 @@ def validate_sources(manifest, release_version, source_ref=None):
         package_path = Path(entry["source"]) / "package.json"
         if source_ref:
             data = json.loads(subprocess.check_output(["git", "show", f"{source_ref}:{package_path.as_posix()}"], text=True))
+            lock_path = package_path.parent / "package-lock.json"
         else:
             source = package_path.resolve()
             if not source.is_relative_to(Path.cwd().resolve()):
                 raise ValueError("npm source escapes checkout")
             data = json.loads(source.read_text())
+            lock_path = package_path.parent / "package-lock.json"
         check_package_metadata(data, entry["name"], release_version, f"source npm package {package_path}")
+        if source_ref:
+            lock_data = json.loads(subprocess.check_output(["git", "show", f"{source_ref}:{lock_path.as_posix()}"], text=True))
+        else:
+            lock_data = json.loads(lock_path.read_text())
+        root = lock_data.get("packages", {}).get("", {})
+        if root.get("name") != entry["name"] or root.get("version") != release_version:
+            raise ValueError(f"source npm lockfile {lock_path}: identity/version mismatch")
 
 
 def check_release_source(manifest_path, tag, source_ref=None):
