@@ -20,10 +20,14 @@ from release_manifest import load_manifest
 
 REGISTRY = "https://registry.npmjs.org"
 _SENSITIVE = re.compile(r"(?i)authorization\s*:\s*bearer\s+[^\s,;]+|(?:npm[_-]?token|token|authorization)\s*[:=]\s*[^\s,;]+|bearer\s+[^\s,;]+")
+_SENSITIVE_JSON = re.compile(
+    r'''(?i)(["'](?:npm[_-]?token|token|authorization)["']\s*:\s*)["'](?:\\.|[^"'\\])*["']'''
+)
 
 
 def _safe_diagnostic(value: bytes | str | None) -> str:
     text = value.decode("utf-8", "replace") if isinstance(value, bytes) else (value or "")
+    text = _SENSITIVE_JSON.sub(r'\1"<redacted>"', text)
     def redact(match: re.Match[str]) -> str:
         value = match.group(0)
         if value.lower().startswith("authorization"):

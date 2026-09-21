@@ -132,6 +132,25 @@ def test_failed_publish_preserves_redacted_diagnostic(release):
     assert "Authorization=<redacted>" in message
 
 
+@pytest.mark.parametrize("stream", ["stdout", "stderr"])
+def test_failed_publish_redacts_quoted_json_credentials(release, stream):
+    manifest, directory, _ = release
+    failed = subprocess.CompletedProcess(
+        [], 1,
+        **{stream: '{"token": "synthetic-token", "authorization":"Bearer synthetic-bearer"}',
+           "stderr" if stream == "stdout" else "stdout": "unrelated diagnostic"},
+    )
+    with patch.object(npm, "registry_version", side_effect=[None, None]), patch.object(npm.subprocess, "run", return_value=failed):
+        with pytest.raises(RuntimeError) as error:
+            npm.publish(manifest, "v1.2.3", directory, dry_run=False)
+    message = str(error.value)
+    assert "synthetic-token" not in message
+    assert "synthetic-bearer" not in message
+    assert '\\"token\\": \\"<redacted>\\"' in message
+    assert '\\"authorization\\":\\"<redacted>\\"' in message
+    assert "unrelated diagnostic" in message
+
+
 def test_failed_publish_preserves_stdout_and_stderr(release):
     manifest, directory, _ = release
     failed = subprocess.CompletedProcess([], 1, stdout="upstream response body", stderr="cli warning")
