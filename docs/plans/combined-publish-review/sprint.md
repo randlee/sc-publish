@@ -57,3 +57,36 @@ passed
 ```
 
 The repository-wide `pytest -q` collection is not a valid aggregate command because independent plugin suites contain duplicate `test_install` module basenames; the affected suites were therefore run separately above. Live hosted qualification, immutable registry admission, credentialed dispatch, and installed atm-core/sc-compose consumer evidence remain postmerge release-readiness work and are intentionally not claimed by this premerge receipt.
+
+## Implementation ledger and isolated-install evidence
+
+The child PR is intentionally a receipt/stack-registration layer; the substantive implementation is distributed across its reviewed parent stack. The relevant commit ledger is:
+
+```text
+FIX01 917b5cf (quoted JSON and nested credential redaction)
+FIX02 eceb0ef, fd2d61e, 87b03f8, 4d50017, 9529052, 0139eec (worker envelope validation/aggregation)
+FIX03 54aaf58, 7ba777b (renderer pin and compatibility)
+FIX04 b685b6c, 006092a (manifest-aware preflight and consumer-independent installed checks)
+FIX05 2c91d7b, 42e0fce (release-candidate provenance and stale renderer rejection)
+FIX06 36d6696, 72d787a (concurrent release convergence)
+FIX07 34feb1a (immutable release prerequisite admission)
+FIX08 cb29cb4, 917b5cf (credential validation and redaction)
+FIX09 a99c9a7, 0a6ceaa, 61568d8 (npm channel, recovery contracts, compatibility evidence)
+FIX10 2c91d7b, 34feb1a (provenance/ref and fail-closed dispatch gates)
+FIX11 b8d3a9a, 006092a, 61568d8 (installed consumer and portable preflight coverage)
+FIX12 47d9f8d (this receipt), PR106, stack #102
+```
+
+Using the pinned `sc-compose==1.5.0` bootstrap environment, the actual installed-consumer checks also passed:
+
+```text
+python3 plugins/go-native-module/tests/run_installed_consumer.py
+6 tests passed
+
+install.py -> temporary generic consumer -> pytest installed .github/scripts/tests
+251 passed, 17 skipped in 14.80s
+install.py --dry-run against the same consumer
+exit 0; Publish-kit assets are in sync.
+```
+
+The installed run used a generated consumer input with source-workspace-only sections removed, matching the CI workflow's isolated vendored-consumer fixture. This is premerge install/render evidence; it does not substitute for postmerge atm-core/sc-compose repository adoption or live release qualification.
