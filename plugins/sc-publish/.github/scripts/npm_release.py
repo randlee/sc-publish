@@ -199,12 +199,16 @@ def publish(manifest, tag, asset_dir, dry_run=True):
                     "channel": "npm", "status": "failed", "tag": tag,
                     "commit": "unavailable", "command": command,
                     "exit_status": result.returncode,
-                    "error": {"code": "NPM.PUBLISH_FAILED", "message": _safe_diagnostic(result.stderr or result.stdout)},
+                    "error": {"code": "NPM.PUBLISH_FAILED", "message": _safe_diagnostic(
+                        "stdout: " + (result.stdout or "") + "\nstderr: " + (result.stderr or "")
+                    )},
                     "attempts": 1, "workflow_url": "unavailable", "job_url": "unavailable",
                     "evidence": "npm subprocess output",
                     "registry_outcome": "version absent after failed publication",
                     "verification": ["registry version lookup returned absent"],
-                    "sanitized_diagnostic": _safe_diagnostic(result.stderr or result.stdout),
+                    "sanitized_diagnostic": _safe_diagnostic(
+                        "stdout: " + (result.stdout or "") + "\nstderr: " + (result.stderr or "")
+                    ),
                 }
                 raise RuntimeError("npm publication failed; retry this channel by tag: " + json.dumps(diagnostic, sort_keys=True))
             identical(existing, path)

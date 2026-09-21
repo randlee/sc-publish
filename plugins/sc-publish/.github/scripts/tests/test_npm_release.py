@@ -130,6 +130,17 @@ def test_failed_publish_preserves_redacted_diagnostic(release):
     assert "Bearer <redacted>" in message
 
 
+def test_failed_publish_preserves_stdout_and_stderr(release):
+    manifest, directory, _ = release
+    failed = subprocess.CompletedProcess([], 1, stdout="upstream response body", stderr="cli warning")
+    with patch.object(npm, "registry_version", side_effect=[None, None]), patch.object(npm.subprocess, "run", return_value=failed):
+        with pytest.raises(RuntimeError) as error:
+            npm.publish(manifest, "v1.2.3", directory, dry_run=False)
+    message = str(error.value)
+    assert "upstream response body" in message
+    assert "cli warning" in message
+
+
 def test_failed_publish_preserves_full_diagnostic_without_truncation(release):
     manifest, directory, _ = release
     detail = "upstream diagnostic " + ("x" * 5000)

@@ -41,7 +41,18 @@ def test_missing_or_malformed_result_fails_closed(text):
 
 
 def test_aggregation_rejects_missing_and_mismatched_workers():
-    with pytest.raises(WorkerResultError, match="missing worker"):
-        aggregate_results([None], ["npm"])
-    with pytest.raises(WorkerResultError, match="mismatch"):
-        aggregate_results([result(channel="pypi")], ["npm"])
+    missing = aggregate_results([None], ["npm"])
+    assert missing[0]["error"]["code"] == "REPORTING.CONTRACT_FAILURE"
+    mismatch = aggregate_results([result(channel="pypi")], ["npm"])
+    assert mismatch[0]["error"]["code"] == "REPORTING.CONTRACT_FAILURE"
+
+
+def test_aggregation_preserves_valid_channel_when_another_is_missing():
+    values = aggregate_results([result(), None], ["npm", "pypi"])
+    assert values[0]["status"] == "passed"
+    assert values[1]["error"]["code"] == "REPORTING.CONTRACT_FAILURE"
+
+
+@pytest.mark.parametrize("status", ["apparently_available", "taken"])
+def test_inquiry_statuses_may_have_no_error(status):
+    assert parse_fenced_result("```json\n" + json.dumps(result(status=status)) + "\n```")["status"] == status

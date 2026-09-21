@@ -60,21 +60,35 @@ def validate_result(result: dict[str, Any]) -> dict[str, Any]:
         raise WorkerResultError("worker result sanitized_diagnostic must be text")
     if result["status"] == "passed" and result["error"] not in (None, "", {}):
         raise WorkerResultError("successful worker result must have error=null or empty")
-    if result["status"] != "passed" and not result["error"]:
+    if result["status"] not in {"passed", "apparently_available", "taken"} and not result["error"]:
         raise WorkerResultError("failed or blocked worker result must preserve error details")
     return result
 
 
 def aggregate_results(results: list[dict[str, Any] | None], expected_channels: list[str]) -> list[dict[str, Any]]:
-    """Validate every result and fail closed for missing or malformed workers."""
-    if len(results) != len(expected_channels):
-        raise WorkerResultError("worker result count does not match manifest channels")
+    """Validate every result, retaining valid channels and recording contract failures."""
     validated = []
     for channel, result in zip(expected_channels, results):
         if result is None:
-            raise WorkerResultError(f"missing worker result for channel {channel}")
-        item = validate_result(result)
-        if item["channel"] != channel:
-            raise WorkerResultError(f"worker result channel mismatch: expected {channel}")
+            item = _contract_failure(channel, "missing worker result")
+        else:
+            try:
+                item = validate_result(result)
+                if item["channel"] != channel:
+                    raise WorkerResultError(f"worker result channel mismatch: expected {channel}")
+            except WorkerResultError as error:
+                item = _contract_failure(channel, str(error))
         validated.append(item)
+    for channel in expected_channels[len(results):]:
+        validated.append(_contract_failure(channel, "missing worker result"))
     return validated
+
+
+def _contract_failure(channel: str, detail: str) -> dict[str, Any]:
+    return {
+        "channel": channel, "status": "failed", "tag": "unavailable", "commit": "unavailable",
+        "command": [], "exit_status": -1, "error": {"code": "REPORTING.CONTRACT_FAILURE", "message": detail},
+        "attempts": 1, "workflow_url": "unavailable", "job_url": "unavailable",
+        "evidence": "worker response envelope", "registry_outcome": "unavailable",
+        "verification": [], "sanitized_diagnostic": detail,
+    }
