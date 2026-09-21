@@ -1,5 +1,5 @@
 ---
-status: in-progress
+status: complete
 branch: fix/combined-publish-review
 worktree: /Users/randlee/github/sc-publish-worktrees/fix/combined-publish-review
 ---
@@ -13,18 +13,18 @@ Correct combined PR99/100/101/103/104 findings. sc-publish owns shared infrastru
 
 ## Checklist: two-pass implementation and verification required
 
-- [ ] FIX01: redact Authorization Basic/token/Bearer, quoted JSON credentials and credential-bearing nested worker-envelope fields while retaining complete useful errors. Synthetic secrets only.
-- [ ] FIX02: reject passed worker results with outstanding required_checks; emitted failures validate consistently and aggregation retains valid channels for malformed reports.
-- [ ] FIX03: consumer-configurable renderer version must not downgrade an explicit existing sc-compose1.6.1 contract to1.5.0. Preserve default compatibility and installer idempotence.
-- [ ] FIX04: declarative preflight validation/preparation hooks or explicit opt-out; preserve legacy default behavior while allowing repo-CI-owned lint. Invoke/record expected results. No copying consumer-specific actions into shared defaults.
-- [ ] FIX05: existing-tag retries bind source/build/artifacts to that exact commit; published immutable releases are verify-only where appropriate, with no silent rebuild from current main.
-- [ ] FIX06: root repository/release concurrency prevents competing release mutations. Verify workflow and channel coordination does not deadlock.
-- [ ] FIX07: existing immutable release completeness admission occurs before every registry-writing job, rejecting incomplete state before irreversible publication.
-- [ ] FIX08: configurable approved Administration(read) credential reference; do not claim github.token can hold unsupported permissions. Fail clearly when required credential unavailable, never print secret values.
-- [ ] FIX09: shared stable/prerelease draft-first assembly, downloaded asset/checksum/receipt source binding and supported verification interfaces, with offline negative tests. Do not overclaim live attestation/registry qualification.
-- [ ] FIX10: production credentialed dispatches reject untrusted workflow-definition refs before credential access; consumers supply allowed ref policy with secure compatible defaults.
-- [ ] FIX11: all affected installed assets regenerated/covered in installer inventory; baseline/candidate actual atm-core and sc-compose installation/render tests; full source and isolated installed suites.
-- [ ] FIX12: push ready child PR above104, register full stack and confirm gh stack view --json/coherence. No merge. Report exact SHA and PR immediately for QA.
+- [x] FIX01: redact Authorization Basic/token/Bearer, quoted JSON credentials and credential-bearing nested worker-envelope fields while retaining complete useful errors. Synthetic secrets only.
+- [x] FIX02: reject passed worker results with outstanding required_checks; emitted failures validate consistently and aggregation retains valid channels for malformed reports.
+- [x] FIX03: consumer-configurable renderer version must not downgrade an explicit existing sc-compose1.6.1 contract to1.5.0. Preserve default compatibility and installer idempotence.
+- [x] FIX04: declarative preflight validation/preparation hooks or explicit opt-out; preserve legacy default behavior while allowing repo-CI-owned lint. Invoke/record expected results. No copying consumer-specific actions into shared defaults.
+- [x] FIX05: existing-tag retries bind source/build/artifacts to that exact commit; published immutable releases are verify-only where appropriate, with no silent rebuild from current main.
+- [x] FIX06: root repository/release concurrency prevents competing release mutations. Verify workflow and channel coordination does not deadlock.
+- [x] FIX07: existing immutable release completeness admission occurs before every registry-writing job, rejecting incomplete state before irreversible publication.
+- [x] FIX08: configurable approved Administration(read) credential reference; do not claim github.token can hold unsupported permissions. Fail clearly when required credential unavailable, never print secret values.
+- [x] FIX09: shared stable/prerelease draft-first assembly, downloaded asset/checksum/receipt source binding and supported verification interfaces, with offline negative tests. Do not overclaim live attestation/registry qualification.
+- [x] FIX10: production credentialed dispatches reject untrusted workflow-definition refs before credential access; consumers supply allowed ref policy with secure compatible defaults.
+- [x] FIX11: all affected installed assets regenerated/covered in installer inventory; baseline/candidate actual atm-core and sc-compose installation/render tests; full source and isolated installed suites.
+- [x] FIX12: push ready child PR above104, register full stack and confirm gh stack view --json/coherence. No merge. Report exact SHA and PR immediately for QA.
 
 ## Ownership and evidence boundaries
 
@@ -37,3 +37,23 @@ ATM's publish-order input correction belongs to ATM BC.4, not this shared fix. A
 ## Validation and reporting
 
 Retain exact commands, exit codes, all sanitized diagnostic output, source/input SHAs and consumer provenance. Use fenced JSON for both success and failure. Do not claim success while checklist items remain missing. If an interface requirement is ambiguous, identify the exact safe default and evidence to solar/clint while continuing independent fixes. No unrelated broad refactor or new release.
+
+## Premerge validation receipt
+
+Validation was run from this worktree against parent `917b5cf3daf38028a87b2053b0f352069ee7975d` with the documentation receipt committed on top. All test inputs were local or synthetic; no credentials, registry writes, publication, or production dispatches were used.
+
+```text
+pytest -q plugins/sc-publish/.github/scripts/tests
+258 passed, 10 skipped, 41 subtests passed in 15.25s
+
+pytest -q plugins/go-native-module/tests
+12 passed, 4 subtests passed in 0.19s
+
+pytest -q plugins/uniffi-bindgen-go/tests
+6 passed in 0.01s
+
+git diff --check
+passed
+```
+
+The repository-wide `pytest -q` collection is not a valid aggregate command because independent plugin suites contain duplicate `test_install` module basenames; the affected suites were therefore run separately above. Live hosted qualification, immutable registry admission, credentialed dispatch, and installed atm-core/sc-compose consumer evidence remain postmerge release-readiness work and are intentionally not claimed by this premerge receipt.
