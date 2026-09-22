@@ -17,8 +17,18 @@ import urllib.parse
 import urllib.request
 
 from release_manifest import load_manifest
+from worker_result import redact_diagnostic, format_fenced_result
 
 REGISTRY = "https://registry.npmjs.org"
+
+
+class NpmPublicationError(RuntimeError):
+    """A complete sanitized publication failure for the channel worker."""
+
+
+def _safe_diagnostic(value: bytes | str | None) -> str:
+    text = value.decode("utf-8", "replace") if isinstance(value, bytes) else (value or "")
+    return redact_diagnostic(text) or "<no diagnostic output>"
 
 
 def packages(manifest):
@@ -178,13 +188,30 @@ def publish(manifest, tag, asset_dir, dry_run=True):
         # No lifecycle scripts, project npmrc, or rebuild in the credentialed leg.
         with tempfile.TemporaryDirectory() as temporary:
             command = ["npm", "publish", str(path.resolve()), "--ignore-scripts", "--access", "public", "--registry", REGISTRY, "--tag", "next" if "-" in release_version else "latest"]
-            result = subprocess.run(command, cwd=temporary, capture_output=True)
+            result = subprocess.run(command, cwd=temporary, capture_output=True, text=True)
         if result.returncode:
             # A race or a response lost after acceptance is recoverable only
-            # when the registry confirms the exact bytes. Never print npm output.
+            # when the registry confirms the exact bytes. Report only sanitized output.
             existing = registry_version(name, release_version)
             if existing is None:
-                raise RuntimeError("npm publication failed; retry this channel by tag")
+                diagnostic = {
+                    "channel": "npm", "status": "failed", "tag": tag,
+                    "commit": "unavailable", "command": command,
+                    "exit_status": result.returncode,
+                    "error": {"code": "NPM.PUBLISH_FAILED", "message": "npm publication failed; retry this channel by tag. " + _safe_diagnostic(
+                        "stdout: " + (result.stdout or "") + "\nstderr: " + (result.stderr or "")
+                    )},
+                    "attempts": 1, "workflow_url": "unavailable", "job_url": "unavailable",
+                    "evidence": "npm subprocess output",
+                    "registry_outcome": "version absent after failed publication",
+                    "verification": ["registry version lookup returned absent"],
+                    "checks": [{"kind": "npm_publish", "status": "failed"}],
+                    "required_checks": [],
+                    "sanitized_diagnostic": _safe_diagnostic(
+                        "stdout: " + (result.stdout or "") + "\nstderr: " + (result.stderr or "")
+                    ),
+                }
+                raise NpmPublicationError(format_fenced_result(diagnostic))
             identical(existing, path)
 
 
@@ -211,4 +238,9 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except NpmPublicationError as error:
+        import sys
+        print(str(error), file=sys.stderr)
+        raise SystemExit(1) from None
