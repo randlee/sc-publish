@@ -129,9 +129,7 @@ def validate_result(result: dict[str, Any]) -> dict[str, Any]:
         raise WorkerResultError("successful worker result must have error=null or empty")
     if result["status"] not in {"passed", "apparently_available", "taken"}:
         error = result["error"]
-        details = error if isinstance(error, str) else (
-            [error.get("message"), error.get("details")] if isinstance(error, dict) else None
-        )
+        details = [error.get("message"), error.get("details")] if isinstance(error, dict) else None
         if not error or not (_has_text(details) or result["sanitized_diagnostic"].strip()):
             raise WorkerResultError("failed or blocked worker result must preserve a meaningful error message or diagnostic")
     return result

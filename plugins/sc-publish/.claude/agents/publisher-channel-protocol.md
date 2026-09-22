@@ -39,8 +39,9 @@ Return exactly one fenced JSON object to the parent `publisher` task on both
 success and failure. Missing, malformed, or incomplete JSON is a reporting
 contract failure and must never be treated as task completion. Preserve full
 sanitized diagnostics; redact credentials and sensitive values only.
-Failed or blocked results must contain a meaningful error message/details or a
-non-empty sanitized diagnostic; an error code alone is insufficient. The parent
+Failed or blocked results must contain an error object with meaningful
+`message`/`details`, or a non-empty sanitized diagnostic. An error code or bare
+error string alone is insufficient. The parent
 publisher validates the complete raw responses with `.github/scripts/worker_result.py`
 before accepting channel completion.
 

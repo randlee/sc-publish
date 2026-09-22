@@ -156,9 +156,10 @@ def test_nested_camelcase_credentials_are_redacted(key):
     assert checked["evidence"]["message"] == "E403 denied"
 
 
-def test_failure_code_without_diagnostics_is_rejected():
+@pytest.mark.parametrize("error", [{"code": "X"}, "NPM.PUBLISH_FAILED"])
+def test_failure_code_without_diagnostics_is_rejected(error):
     from worker_result import validate_result
-    value = result(status="failed", exit_status=1, error={"code": "X"},
+    value = result(status="failed", exit_status=1, error=error,
                    evidence=[], registry_outcome="", verification=[], sanitized_diagnostic="")
     with pytest.raises(WorkerResultError, match="meaningful"):
         validate_result(value)
@@ -176,13 +177,15 @@ def test_surplus_reports_are_retained_as_contract_failures():
     assert "SYNTHETIC_SECRET" not in json.dumps(values)
 
 
-@pytest.mark.parametrize("scenario", ["passed", "failed", "missing", "malformed", "surplus"])
+@pytest.mark.parametrize("scenario", ["passed", "failed", "missing", "malformed", "surplus", "code_only"])
 def test_publisher_cli_validates_raw_responses_and_preserves_all_results(tmp_path, scenario):
     import subprocess
     first = tmp_path / "first.txt"
     value = result()
     if scenario == "failed":
         value.update(status="failed", exit_status=1, error={"code": "DENIED", "message": "E403 denied"})
+    if scenario == "code_only":
+        value.update(status="failed", exit_status=1, error="NPM.PUBLISH_FAILED", sanitized_diagnostic="")
     first.write_text("```json\n" + json.dumps(value) + "\n```")
     command = [sys.executable, str(Path(__file__).resolve().parents[1] / "worker_result.py"), "--expected-channels", "npm"]
     if scenario != "missing":
