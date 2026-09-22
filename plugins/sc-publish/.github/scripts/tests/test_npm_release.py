@@ -324,3 +324,24 @@ def test_npm_checks_precede_tag_creation_and_registry_jobs():
     for name in ['build-npm','publish']:
         needs = workflow['jobs'][name]['needs']
         assert needs == 'gate-and-tag' or 'gate-and-tag' in needs
+
+
+@pytest.mark.parametrize("secret", [
+    "//registry.npmjs.org/:_authToken=SYNTHETIC_SECRET",
+    "https://user:SYNTHETIC_SECRET@registry.npmjs.org/pkg",
+    '{"authToken":"SYNTHETIC_SECRET"}',
+])
+def test_npm_failure_is_a_complete_fenced_worker_result(release, secret):
+    from worker_result import parse_fenced_result
+    manifest, directory, _ = release
+    failed = subprocess.CompletedProcess([], 1, stdout=secret, stderr="E403 publish denied")
+    with patch.object(npm, "registry_version", side_effect=[None, None]), patch.object(npm.subprocess, "run", return_value=failed):
+        with pytest.raises(npm.NpmPublicationError) as error:
+            npm.publish(manifest, "v1.2.3", directory, dry_run=False)
+    report = parse_fenced_result(str(error.value))
+    assert report["channel"] == "npm"
+    assert report["exit_status"] == 1
+    assert report["checks"] == [{"kind": "npm_publish", "status": "failed"}]
+    assert report["required_checks"] == []
+    assert "E403 publish denied" in report["sanitized_diagnostic"]
+    assert "SYNTHETIC_SECRET" not in str(error.value)
