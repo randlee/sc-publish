@@ -87,6 +87,21 @@ The Claude/Codex publisher spawns the role-specific background channel workers
 the same channel playbooks inline and sequentially. Both profiles consume the
 same non-disclosing credential preflight before any publication.
 
+## GitHub prereleases
+
+Consumers may opt in by declaring `[prerelease]` in
+`release/publish-artifacts.toml`. The installed `prerelease` skill is
+registered under both `.claude/skills/` and `.codex/skills/`, with `--list`,
+`--install`, and `--publish` modes (`--create` remains a compatibility alias).
+Publishing creates only GitHub prerelease archive pairs: it tags an explicitly
+authorized, clean non-protected branch,
+waits for `prerelease-archive.yml`, verifies every Release asset and checksum,
+and prints the Release URL. It never publishes to the normal package or
+channel registries. Install resolves a selected or latest matching
+prerelease, checksum-verifies the host archive, stages it under the manifest
+install root, updates the platform selector, and invokes the declared
+post-install and verification commands. Dry runs do not make network calls.
+
 ## The channel model
 
 Each publish channel — `github_release`, `crates_io`, `pypi`, `npm`, `homebrew`,

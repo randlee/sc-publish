@@ -25,10 +25,28 @@ jobs:
         run: '"$SC_COMPOSE_PYTHON" -m pip install pytest==8.3.5 PyYAML==6.0.3'
       - name: Run complete source publish-kit tests
         run: '"$SC_COMPOSE_PYTHON" -m pytest plugins/sc-publish/.github/scripts/tests -q'
+      - name: Validate workflow YAML syntax
+        run: |
+          python -m pip install PyYAML==6.0.2
+          python - <<'PY'
+          from pathlib import Path
+
+          import yaml
+
+          paths = sorted(Path(".github/workflows").glob("*.yml"))
+          paths += sorted(Path("plugins/sc-publish/.github/workflows").glob("*.yml"))
+          for path in paths:
+              with path.open(encoding="utf-8") as workflow:
+                  document = yaml.safe_load(workflow)
+              if not isinstance(document, dict):
+                  raise SystemExit(f"{path}: expected a YAML mapping")
+          print(f"parsed {len(paths)} workflow files")
+          PY
       - name: Run publish-kit unit tests
         run: |
           "$SC_COMPOSE_PYTHON" -m unittest discover -s plugins/sc-publish/.github/scripts/tests -p 'test_install.py'
           "$SC_COMPOSE_PYTHON" -m unittest discover -s plugins/sc-publish/.github/scripts/tests -p 'test_publish_kit_*.py'
+          "$SC_COMPOSE_PYTHON" -m unittest discover -s plugins/sc-publish/.github/scripts/tests -p 'test_prerelease.py'
       - name: Run go-native-module peer-package tests
         run: |
           "$SC_COMPOSE_PYTHON" -m unittest discover -s plugins/go-native-module/tests -p 'test_*.py'
