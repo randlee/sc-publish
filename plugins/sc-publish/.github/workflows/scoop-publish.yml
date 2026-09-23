@@ -27,7 +27,7 @@ jobs:
       asset_patterns: ${{ steps.config.outputs.asset_patterns }}
       release_version: ${{ steps.meta.outputs.release_version }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           ref: ${{ inputs.tag }}
       - id: config
@@ -67,16 +67,16 @@ jobs:
             exit 1
           fi
       - name: Checkout workflow support
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
       - name: Bootstrap renderer
         uses: ./.github/actions/setup-renderer
       - name: Checkout immutable release source
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           ref: ${{ inputs.tag }}
           path: release-source
       - name: Checkout configured Scoop bucket
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           repository: ${{ fromJSON(needs.verify-release.outputs.channel_config).channel.bucket_repository }}
           token: ${{ secrets.SCOOP_BUCKET_TOKEN }}
