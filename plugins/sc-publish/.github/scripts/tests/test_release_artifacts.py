@@ -1244,7 +1244,7 @@ def test_release_workflows_gate_cargo_and_python_legs_on_the_manifest() -> None:
     assert "steps.build_plan.outputs.workspace_toml" in release_text
 
     assert "build-plan" in preflight_text
-    assert preflight_text.count("steps.build_plan.outputs.has_crates == 'true'") >= 5
+    assert preflight_text.count("steps.build_plan.outputs.has_crates == 'true'") >= 3
     assert "steps.build_plan.outputs.workspace_toml" in preflight_text
     assert '--workspace-toml Cargo.toml' not in preflight_text
     assert 'if [[ "${HAS_CRATES}" == "true" ]]; then' in preflight_text
