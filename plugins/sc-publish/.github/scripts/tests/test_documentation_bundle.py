@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import argparse
 import io
 import json
 import os
@@ -19,8 +20,8 @@ from pathlib import Path
 SCRIPTS = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(SCRIPTS))
 
-import release_documentation as DOCS  # noqa: E402
-from test_install import INSTALL, InstallValuesTests  # noqa: E402
+import release_documentation as DOCS
+from test_install import INSTALL, InstallValuesTests
 
 PLUGIN_ROOT = SCRIPTS.parents[1]
 GOLDEN = Path(__file__).with_name("golden_publish_artifacts_no_bundle.toml")
@@ -212,7 +213,7 @@ class InstallRenderTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "input.json"
             path.write_text(json.dumps(values), encoding="utf-8")
-            with self.assertRaises(Exception):
+            with self.assertRaises(argparse.ArgumentTypeError):
                 INSTALL.load_install_values(path)
 
 
@@ -283,7 +284,7 @@ class PathHardeningTests(unittest.TestCase):
 
 
 class ArchiveHardeningTests(unittest.TestCase):
-    GOOD = ["pkg/bin/example", *[f"pkg/share/docs/{n}" for n in BUNDLE["required_files"]]]
+    GOOD = ("pkg/bin/example", *[f"pkg/share/docs/{n}" for n in BUNDLE["required_files"]])
 
     def check_tar(self, builder) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -385,7 +386,7 @@ class InstallValidationTests(unittest.TestCase):
             {**BUNDLE, "required_files": ["./a.md"]},
         ]
         for bad in bad_bundles:
-            with self.subTest(bundle=bad), self.assertRaises(Exception):
+            with self.subTest(bundle=bad), self.assertRaises(argparse.ArgumentTypeError):
                 self.load(bad)
 
 
@@ -454,11 +455,12 @@ class GoldenAndCliTests(unittest.TestCase):
                 self.assertEqual(result.returncode, 0, result.stderr)
                 archive = root / env_file.read_text(encoding="utf-8").split("=", 1)[1].strip()
                 self.assertTrue(archive.name.endswith(target["archive"]))
-                names = (
-                    zipfile.ZipFile(archive).namelist()
-                    if archive.suffix == ".zip"
-                    else tarfile.open(archive).getnames()
-                )
+                if archive.suffix == ".zip":
+                    with zipfile.ZipFile(archive) as opened_zip:
+                        names = opened_zip.namelist()
+                else:
+                    with tarfile.open(archive) as opened_tar:
+                        names = opened_tar.getnames()
                 self.assertIn(f"{archive.name.removesuffix('.' + target['archive'])}/share/docs/README.md", names)
                 checked = run_script(
                     "validate-release-archive", "--manifest", str(manifest_path),

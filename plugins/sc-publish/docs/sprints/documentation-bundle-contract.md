@@ -10,7 +10,7 @@ worktree: /Users/randlee/github/sc-publish-worktrees/feature/documentation-bundl
 
 Let a consumer declare a documentation directory that is validated, staged into
 every release archive, and verified in the produced archive, without any
-consumer-specific logic in the kit. Tracking beads (sc-lint): lint-spx.43 (implementation and QA fixes), lint-spx.45 (QA).
+consumer-specific logic in the kit. Tracking beads (sc-lint): lint-spx.43 (implementation and QA fixes), lint-spx.45 and lint-spx.46 (QA-1, QA-2).
 
 ## Deliverables
 
