@@ -216,8 +216,10 @@ rendered manifest carries no `[documentation_bundle]` table.
   (validate, then copy to `<stage>/<package_directory>`) for every target,
   in both `release.yml` and `prerelease-archive.yml`.
 - After the archive is created, `validate-release-archive` checks that it
-  holds every release binary and exactly the declared bundle, with no unsafe
-  names, duplicate members or non-regular members under it (tar.gz and zip;
+  holds every release binary and exactly the declared bundle. When a bundle is
+  declared, validation is strict archive-wide: no symlinks, hardlinks,
+  duplicate members, `./`-prefixed, absolute, `..` or backslash names anywhere
+  in the archive (tar.gz and zip;
   `--windows` expects `.exe` binaries).
 - `validate-documentation-bundle --documentation-directory <dir>` validates a
   source tree on its own, for consumer lint recipes.

@@ -143,8 +143,6 @@ class BundleContractTests(unittest.TestCase):
             self.assertIn("missing=['README.md']", str(raised.exception))
 
     def test_stage_copies_bundle_under_package_directory(self) -> None:
-        import os
-
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             write_tree(root / "docs/bundle", BUNDLE["required_files"])
@@ -390,6 +388,20 @@ class InstallValidationTests(unittest.TestCase):
             with self.subTest(bundle=bad), self.assertRaises(argparse.ArgumentTypeError):
                 self.load(bad)
 
+    def test_install_rejects_bundled_path_overlap_and_flat_binary_collision(self) -> None:
+        # valid_values() bundles docs into share/doc/example.
+        for package in ("share", "share/doc", "share/doc/example", "share/doc/example/x"):
+            with self.subTest(package=package), self.assertRaises(argparse.ArgumentTypeError):
+                self.load({**BUNDLE, "package_directory": package})
+        values = InstallValuesTests.valid_values()
+        values["project"]["archive_layout"] = "flat"
+        values["documentation_bundle"] = {**BUNDLE, "package_directory": "example"}
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "input.json"
+            path.write_text(json.dumps(values), encoding="utf-8")
+            with self.assertRaises(argparse.ArgumentTypeError):
+                INSTALL.load_install_values(path)
+
 
 class GoldenAndCliTests(unittest.TestCase):
     def test_absent_render_is_byte_identical_to_the_golden(self) -> None:
@@ -534,7 +546,9 @@ class FlatLayoutTests(unittest.TestCase):
             DOCS.validate_release_archive(self.flat_manifest(), BINARIES, tar)
             dotted = root / "dotted.tar.gz"
             make_tar(dotted, [f"./{n}" for n in members])
-            DOCS.validate_release_archive(self.flat_manifest(), BINARIES, dotted)
+            with self.assertRaises(SystemExit) as raised:
+                DOCS.validate_release_archive(self.flat_manifest(), BINARIES, dotted)
+            self.assertIn("unsafe name", str(raised.exception))
             zipped = root / "pkg.zip"
             make_zip(zipped, ["example.exe", *members[1:]])
             DOCS.validate_release_archive(self.flat_manifest(), BINARIES, zipped, windows=True)
@@ -612,6 +626,7 @@ class WorkflowParityTests(unittest.TestCase):
         self.assertIn("stage-documentation-bundle", release[0])
         self.assertIn("validate-release-archive", release[1])
         self.assertIn("validate-release-archive", prerelease[1])
+        self.assertEqual(release[1], prerelease[1])
 
     def test_homebrew_binary_paths_follow_the_archive_layout(self) -> None:
         text = (PLUGIN_ROOT / ".github/workflows/homebrew-publish.yml").read_text(encoding="utf-8")

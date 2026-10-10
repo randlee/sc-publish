@@ -31,25 +31,19 @@ def documentation_bundle(manifest: dict) -> dict | None:
     )
     for key in ("source_directory", "package_directory"):
         require_safe_relative_path(bundle[key], f"[documentation_bundle].{key}")
-    package = bundle["package_directory"]
-    if archive_layout(manifest) == FLAT_LAYOUT:
-        first = PurePosixPath(package).parts[0]
-        names = {binary["name"] for binary in manifest.get("release_binaries", [])}
-        if first in names or first.removesuffix(".exe") in names:
-            raise SystemExit(
-                "[documentation_bundle].package_directory must not collide with a "
-                f"release binary in a flat archive: {package!r}"
-            )
-    elif package == RESERVED_ROOT or package.startswith(RESERVED_ROOT + "/"):
-        raise SystemExit(f"[documentation_bundle].package_directory must not use {RESERVED_ROOT}/")
-    for binary in manifest.get("release_binaries", []):
-        for bundled in binary.get("bundled_paths", []):
-            destination = str(bundled.get("destination", ""))
-            if _overlaps(package, destination):
-                raise SystemExit(
-                    "[documentation_bundle].package_directory overlaps bundled_paths "
-                    f"destination {destination!r}"
-                )
+    binaries = manifest.get("release_binaries", [])
+    conflict = package_directory_conflict(
+        bundle["package_directory"],
+        archive_layout(manifest),
+        {binary["name"] for binary in binaries},
+        [
+            str(bundled.get("destination", ""))
+            for binary in binaries
+            for bundled in binary.get("bundled_paths", [])
+        ],
+    )
+    if conflict:
+        raise SystemExit(f"[documentation_bundle].package_directory {conflict}")
     files = bundle["required_files"]
     if not isinstance(files, list) or not files:
         raise SystemExit("[documentation_bundle].required_files must be a non-empty list")
@@ -71,6 +65,26 @@ def archive_layout(manifest: dict) -> str:
     if layout not in (KIT_LAYOUT, FLAT_LAYOUT):
         raise SystemExit(f"[project].archive_layout must be 'kit' or 'flat', got {layout!r}")
     return layout
+
+
+def package_directory_conflict(
+    package: str, layout: str, binary_names: set[str], destinations: list[str]
+) -> str | None:
+    """Return why a package directory is unusable for the layout, or None.
+
+    Shared by release-time (release_documentation) and install-time (install.py)
+    validation so the two cannot drift.
+    """
+    if layout == FLAT_LAYOUT:
+        first = PurePosixPath(package).parts[0]
+        if first in binary_names or first.removesuffix(".exe") in binary_names:
+            return f"must not collide with a release binary in a flat archive: {package!r}"
+    elif package == RESERVED_ROOT or package.startswith(RESERVED_ROOT + "/"):
+        return f"must not use {RESERVED_ROOT}/"
+    for destination in destinations:
+        if _overlaps(package, destination):
+            return f"overlaps bundled_paths destination {destination!r}"
+    return None
 
 
 def _overlaps(left: str, right: str) -> bool:
@@ -153,7 +167,7 @@ def validate_release_archive(
     manifest: dict, binaries: list[dict], archive: Path, *, windows: bool = False
 ) -> None:
     """Check an archive holds every release binary and, when declared, exactly the bundle."""
-    members = [name.removeprefix("./") for name in _archive_members(archive)]
+    members = _archive_members(archive)
     suffix = ".exe" if windows else ""
     if archive_layout(manifest) == FLAT_LAYOUT:
         root = "<archive root>"
@@ -208,7 +222,7 @@ def _archive_members(archive: Path) -> list[str]:
 
 def _record_member(names: list[str], name: str, is_dir: bool, regular: bool) -> None:
     path = PurePosixPath(name)
-    if path.is_absolute() or ".." in path.parts or "\\" in name:
+    if path.is_absolute() or ".." in path.parts or "\\" in name or name.startswith("./"):
         raise SystemExit(f"archive member has an unsafe name: {name!r}")
     if not regular:
         raise SystemExit(f"archive member is not a regular file or directory: {name!r}")

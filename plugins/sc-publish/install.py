@@ -238,9 +238,21 @@ def load_install_values(path: Path) -> dict[str, object]:
             _require_bundle_path(entry, "required_files entry")
         if len(set(files)) != len(files):
             raise argparse.ArgumentTypeError("documentation_bundle.required_files must not contain duplicates")
-        package = bundle["package_directory"]
-        if package == "bin" or package.startswith("bin/"):
-            raise argparse.ArgumentTypeError("documentation_bundle.package_directory must not use bin/")
+        from release_documentation import package_directory_conflict
+
+        binaries = values.get("release_binaries", [])
+        conflict = package_directory_conflict(
+            bundle["package_directory"],
+            _require_mapping(values.get("project", {}), "project").get("archive_layout", "kit"),
+            {entry["name"] for entry in binaries},
+            [
+                bundled["destination"]
+                for entry in binaries
+                for bundled in entry.get("bundled_paths", [])
+            ],
+        )
+        if conflict:
+            raise argparse.ArgumentTypeError(f"documentation_bundle.package_directory {conflict}")
 
     if "prerelease" in values:
         prerelease = _require_mapping(values["prerelease"], "prerelease")
