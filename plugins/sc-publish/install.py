@@ -11,7 +11,7 @@ import shutil
 import sys
 import tempfile
 import tomllib
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -132,6 +132,22 @@ def _require_entries(
     return entries
 
 
+def _require_bundle_path(value: str, label: str) -> None:
+    """Mirror release_documentation.require_safe_relative_path (normalized relative POSIX path)."""
+    path = PurePosixPath(value)
+    if (
+        path.is_absolute()
+        or path.as_posix() != value
+        or value == "."
+        or ".." in path.parts
+        or "\\" in value
+        or ":" in value
+    ):
+        raise argparse.ArgumentTypeError(
+            f"documentation_bundle.{label} must be a normalized relative path: {value!r}"
+        )
+
+
 def load_install_values(path: Path) -> dict[str, object]:
     """Load the complete, caller-declared publish manifest contract."""
     try:
@@ -214,10 +230,17 @@ def load_install_values(path: Path) -> dict[str, object]:
     if "documentation_bundle" in values:
         bundle = _require_mapping(values["documentation_bundle"], "documentation_bundle")
         for field in ("source_directory", "package_directory"):
-            _require_string(bundle.get(field), f"documentation_bundle.{field}")
+            _require_bundle_path(_require_string(bundle.get(field), f"documentation_bundle.{field}"), field)
         files = _require_string_array(bundle.get("required_files"), "documentation_bundle.required_files")
         if not files:
             raise argparse.ArgumentTypeError("documentation_bundle.required_files must not be empty")
+        for entry in files:
+            _require_bundle_path(entry, "required_files entry")
+        if len(set(files)) != len(files):
+            raise argparse.ArgumentTypeError("documentation_bundle.required_files must not contain duplicates")
+        package = bundle["package_directory"]
+        if package == "bin" or package.startswith("bin/"):
+            raise argparse.ArgumentTypeError("documentation_bundle.package_directory must not use bin/")
 
     if "prerelease" in values:
         prerelease = _require_mapping(values["prerelease"], "prerelease")

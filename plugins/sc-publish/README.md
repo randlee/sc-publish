@@ -193,14 +193,17 @@ rendered manifest carries no `[documentation_bundle]` table.
 }
 ```
 
-- `source_directory` and `package_directory` are relative paths inside the
-  repository and archive; `required_files` are relative to both and must be
+- `source_directory` and `package_directory` are normalized relative POSIX paths
+  (no `.`, `..`, empty parts, trailing slash, backslash or drive); the package
+  directory must not be `bin` or overlap a `bundled_paths` destination, and the
+  source tree must not contain symlinks; `required_files` are relative to both and must be
   exactly the files in the source directory (no missing, no extra).
 - The packaging step runs `release_artifacts.py stage-documentation-bundle`
   (validate, then copy to `<stage>/<package_directory>`) for every target,
   in both `release.yml` and `prerelease-archive.yml`.
 - After the archive is created, `validate-release-archive` checks that it
-  holds every release binary and exactly the declared bundle (tar.gz and zip;
+  holds every release binary and exactly the declared bundle, with no unsafe
+  names, duplicate members or non-regular members under it (tar.gz and zip;
   `--windows` expects `.exe` binaries).
 - `validate-documentation-bundle --documentation-directory <dir>` validates a
   source tree on its own, for consumer lint recipes.

@@ -9,11 +9,12 @@ from __future__ import annotations
 
 import argparse
 import shutil
+import stat
 import tarfile
 import zipfile
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
-from release_manifest import _require_keys, load_manifest
+from release_manifest import load_manifest, require_keys
 
 
 def documentation_bundle(manifest: dict) -> dict | None:
@@ -23,29 +24,63 @@ def documentation_bundle(manifest: dict) -> dict | None:
         return None
     if not isinstance(bundle, dict):
         raise SystemExit("[documentation_bundle] must be a table")
-    _require_keys(
+    require_keys(
         bundle,
         ("source_directory", "package_directory", "required_files"),
         "[documentation_bundle]",
     )
     for key in ("source_directory", "package_directory"):
-        _require_safe_relative_path(bundle[key], f"[documentation_bundle].{key}")
+        require_safe_relative_path(bundle[key], f"[documentation_bundle].{key}")
+    package = bundle["package_directory"]
+    if package == RESERVED_ROOT or package.startswith(RESERVED_ROOT + "/"):
+        raise SystemExit(f"[documentation_bundle].package_directory must not use {RESERVED_ROOT}/")
+    for binary in manifest.get("release_binaries", []):
+        for bundled in binary.get("bundled_paths", []):
+            destination = str(bundled.get("destination", ""))
+            if _overlaps(package, destination):
+                raise SystemExit(
+                    "[documentation_bundle].package_directory overlaps bundled_paths "
+                    f"destination {destination!r}"
+                )
     files = bundle["required_files"]
     if not isinstance(files, list) or not files:
         raise SystemExit("[documentation_bundle].required_files must be a non-empty list")
     for entry in files:
-        _require_safe_relative_path(entry, "[documentation_bundle].required_files entry")
+        require_safe_relative_path(entry, "[documentation_bundle].required_files entry")
     if len(set(files)) != len(files):
         raise SystemExit("[documentation_bundle].required_files must not contain duplicates")
     return bundle
 
 
-def _require_safe_relative_path(value: object, label: str) -> None:
+RESERVED_ROOT = "bin"
+
+
+def _overlaps(left: str, right: str) -> bool:
+    if not right:
+        return False
+    a, b = PurePosixPath(left).parts, PurePosixPath(right).parts
+    shortest = min(len(a), len(b))
+    return a[:shortest] == b[:shortest]
+
+
+def require_safe_relative_path(value: object, label: str) -> None:
+    """Require a normalized, repository-relative POSIX path (no `.`, `..`, `//`, drives)."""
     if not isinstance(value, str) or not value:
         raise SystemExit(f"{label} must be a non-empty string")
-    path = Path(value)
-    if path.is_absolute() or ".." in path.parts or "\\" in value:
-        raise SystemExit(f"{label} must be a relative path inside the repository: {value}")
+    path = PurePosixPath(value)
+    normalized = (
+        not path.is_absolute()
+        and path.as_posix() == value
+        and value != "."
+        and ".." not in path.parts
+        and "\\" not in value
+        and ":" not in value
+    )
+    if not normalized:
+        raise SystemExit(
+            f"{label} must be a normalized relative path inside the repository "
+            f"(no '.', '..', empty parts, trailing slash, backslash or drive): {value!r}"
+        )
 
 
 def _bundle_files(bundle: dict) -> set[str]:
@@ -60,6 +95,13 @@ def validate_documentation_bundle(manifest: dict, source_directory: Path) -> Non
     if not source_directory.is_dir():
         raise SystemExit(f"documentation bundle source is not a directory: {source_directory}")
     expected = _bundle_files(bundle)
+    links = sorted(
+        item.relative_to(source_directory).as_posix()
+        for item in source_directory.rglob("*")
+        if item.is_symlink()
+    )
+    if links:
+        raise SystemExit(f"documentation bundle source must not contain symlinks: {links}")
     actual = {
         item.relative_to(source_directory).as_posix()
         for item in source_directory.rglob("*")
@@ -83,8 +125,10 @@ def stage_documentation_bundle(manifest: dict, stage_directory: Path) -> None:
     validate_documentation_bundle(manifest, source)
     destination = stage_directory / bundle["package_directory"]
     if destination.exists():
-        shutil.rmtree(destination)
-    shutil.copytree(source, destination)
+        raise SystemExit(
+            f"documentation bundle destination already exists in the stage: {destination}"
+        )
+    shutil.copytree(source, destination, symlinks=True)
 
 
 def validate_release_archive(
@@ -94,7 +138,9 @@ def validate_release_archive(
     members = _archive_members(archive)
     roots = {member.split("/", 1)[0] for member in members}
     if len(roots) != 1:
-        raise SystemExit(f"archive must contain a single top-level directory, found {sorted(roots)}")
+        raise SystemExit(
+            f"archive must contain a single top-level directory, found {sorted(roots)}"
+        )
     root = roots.pop()
     relative = {member.split("/", 1)[1] for member in members if "/" in member}
     suffix = ".exe" if windows else ""
@@ -120,12 +166,37 @@ def validate_release_archive(
 
 
 def _archive_members(archive: Path) -> list[str]:
-    """Return file member names (directories excluded) of a tar.gz or zip archive."""
+    """Return regular-file member names of a tar.gz or zip archive.
+
+    Fails on unsafe names, duplicates and any member that is neither a regular
+    file nor a directory (symlinks, hardlinks, devices).
+    """
+    names: list[str] = []
     if archive.name.endswith(".zip"):
         with zipfile.ZipFile(archive) as opened:
-            return [name for name in opened.namelist() if not name.endswith("/")]
-    with tarfile.open(archive, "r:*") as opened:
-        return [member.name for member in opened.getmembers() if member.isfile()]
+            for info in opened.infolist():
+                mode = info.external_attr >> 16
+                kind = stat.S_IFMT(mode) or stat.S_IFREG
+                regular = kind in (stat.S_IFREG, stat.S_IFDIR)
+                _record_member(names, info.filename, info.is_dir(), regular)
+    else:
+        with tarfile.open(archive, "r:*") as opened:
+            for member in opened.getmembers():
+                _record_member(names, member.name, member.isdir(), member.isreg() or member.isdir())
+    return names
+
+
+def _record_member(names: list[str], name: str, is_dir: bool, regular: bool) -> None:
+    path = PurePosixPath(name)
+    if path.is_absolute() or ".." in path.parts or "\\" in name:
+        raise SystemExit(f"archive member has an unsafe name: {name!r}")
+    if not regular:
+        raise SystemExit(f"archive member is not a regular file or directory: {name!r}")
+    if is_dir:
+        return
+    if name in names:
+        raise SystemExit(f"archive contains a duplicate member: {name!r}")
+    names.append(name)
 
 
 def package_config_with_bundle(manifest: dict, config: dict) -> dict:

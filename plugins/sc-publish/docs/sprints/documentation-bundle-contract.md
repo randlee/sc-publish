@@ -1,5 +1,5 @@
 ---
-status: complete
+status: in-progress
 branch: feature/documentation-bundle
 worktree: /Users/randlee/github/sc-publish-worktrees/feature/documentation-bundle
 ---
@@ -10,7 +10,7 @@ worktree: /Users/randlee/github/sc-publish-worktrees/feature/documentation-bundl
 
 Let a consumer declare a documentation directory that is validated, staged into
 every release archive, and verified in the produced archive, without any
-consumer-specific logic in the kit. Tracking bead: lint-spx.43 (sc-lint).
+consumer-specific logic in the kit. Tracking beads (sc-lint): lint-spx.43 (implementation and QA fixes), lint-spx.45 (QA).
 
 ## Deliverables
 
@@ -33,3 +33,19 @@ consumer-specific logic in the kit. Tracking bead: lint-spx.43 (sc-lint).
 - Archive layout is unchanged: the bundle lands at
   `<archive-root>/<package_directory>/`.
 - sc-publish has no `docs/project-plan.md`; the sprint doc is the only index.
+
+## Acceptance criteria
+
+- Absent table: rendered `publish-artifacts.toml` is byte-identical to the
+  pre-feature render (golden test, fails if the renderer is unavailable).
+- No consumer-specific names or logic in kit code.
+- Declared table: validated, staged, and verified for tar.gz and zip archives,
+  including through the workflow packager.
+- Paths are normalized; package directory cannot collide with `bin/` or
+  `bundled_paths`; symlinks, unsafe names, duplicates and non-regular archive
+  members are rejected; staging never deletes an existing destination.
+- Install-time validation mirrors release-time rules.
+
+## QA-1 fixes (SP-B1..B2, SP-I1..I4, SP-M1..M4)
+
+Addressed on this branch; status returns to `complete` after QA-2 passes.

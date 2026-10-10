@@ -22,6 +22,9 @@ def _require_keys(entry: dict, required: tuple[str, ...], label: str) -> None:
         raise SystemExit(f"{label} missing required keys: {joined}")
 
 
+require_keys = _require_keys
+
+
 def load_channel_contracts(path: Path) -> dict[str, dict]:
     """Load the vendorable, non-secret protocol for every supported channel."""
     data = tomllib.loads(path.read_text(encoding="utf-8"))
