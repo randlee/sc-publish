@@ -235,34 +235,36 @@ def binary_name(binary: str) -> str:
     return f"{binary}.exe" if platform.system() == "Windows" else binary
 
 
-def staged_pair(stage: Path, config: dict[str, Any]) -> list[Path]:
+def staged_pair(stage: Path, config: dict[str, Any], flat: bool = False) -> list[Path]:
     values = config.get("binaries")
     if not isinstance(values, list) or not values or not all(isinstance(value, str) and value for value in values):
         raise SystemExit("[prerelease].binaries must be a non-empty string array")
-    paths = [stage / "bin" / binary_name(value) for value in values]
+    paths = [(stage if flat else stage / "bin") / binary_name(value) for value in values]
     if not all(path.is_file() for path in paths):
         raise SystemExit(f"staged prerelease pair is incomplete under {stage}")
     return paths
 
 
-def stage_archive(archive: Path, stage: Path, config: dict[str, Any]) -> list[Path]:
+def stage_archive(
+    archive: Path, stage: Path, config: dict[str, Any], flat: bool = False
+) -> list[Path]:
     if stage.is_dir():
-        return staged_pair(stage, config)
+        return staged_pair(stage, config, flat)
     staging = stage.with_name(f".{stage.name}.download")
     shutil.rmtree(staging, ignore_errors=True)
     staging.mkdir(mode=0o700, parents=True)
     try:
         safe_extract(archive, staging)
-        roots = [path for path in staging.iterdir() if path.is_dir()]
+        roots = [staging] if flat else [path for path in staging.iterdir() if path.is_dir()]
         if len(roots) != 1:
             raise SystemExit("prerelease archive has an unexpected layout")
-        staged_pair(roots[0], config)
+        staged_pair(roots[0], config, flat)
         stage.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
         shutil.rmtree(stage, ignore_errors=True)
         os.replace(roots[0], stage)
     finally:
         shutil.rmtree(staging, ignore_errors=True)
-    return staged_pair(stage, config)
+    return staged_pair(stage, config, flat)
 
 
 def selector_directory(config: dict[str, Any]) -> Path:
@@ -309,13 +311,14 @@ def install(manifest: dict[str, Any], requested: str) -> tuple[str, Path]:
     version, _release = select_release(config, requested)
     root = Path(os.path.expandvars(required_string(config, "install_root"))).expanduser()
     stage = root / f"v{version}"
+    flat = manifest.get("project", {}).get("archive_layout", "kit") == "flat"
     if stage.is_dir():
-        paths = staged_pair(stage, config)
+        paths = staged_pair(stage, config, flat)
     else:
         tag = f"{required_string(config, 'tag_prefix')}{version}"
         with tempfile.TemporaryDirectory(prefix="prerelease-") as directory:
             archive = download_checked_archive(tag, version, manifest, Path(directory))
-            paths = stage_archive(archive, stage, config)
+            paths = stage_archive(archive, stage, config, flat)
     repoint_selector(paths, config)
     verify_install(config, version, stage)
     return version, stage

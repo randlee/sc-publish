@@ -22,6 +22,9 @@ def _require_keys(entry: dict, required: tuple[str, ...], label: str) -> None:
         raise SystemExit(f"{label} missing required keys: {joined}")
 
 
+require_keys = _require_keys
+
+
 def load_channel_contracts(path: Path) -> dict[str, dict]:
     """Load the vendorable, non-secret protocol for every supported channel."""
     data = tomllib.loads(path.read_text(encoding="utf-8"))
@@ -67,6 +70,9 @@ def load_manifest(path: Path, *, with_channel_contracts: bool = False) -> dict:
     # Optional: the prerelease skill's table is validated only when declared.
     if "prerelease" in data:
         manifest["prerelease"] = data["prerelease"]
+    # Optional: a consumer-declared documentation bundle staged into archives.
+    if "documentation_bundle" in data:
+        manifest["documentation_bundle"] = data["documentation_bundle"]
     if with_channel_contracts:
         manifest["channel_contracts"] = load_channel_contracts(
             path.parent / CHANNEL_CONTRACTS_FILE
@@ -383,6 +389,8 @@ def _require_project(manifest: dict) -> dict:
         ("name", "archive_prefix", "description", "homepage", "license"),
         "[project]",
     )
+    if project.get("archive_layout", "kit") not in ("kit", "flat"):
+        raise SystemExit("[project].archive_layout must be 'kit' or 'flat'")
     return project
 
 

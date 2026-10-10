@@ -225,26 +225,57 @@ jobs:
           stage = Path(f"{project['archive_prefix']}_{version}_{target_name}")
           if stage.exists():
               shutil.rmtree(stage)
-          (stage / "bin").mkdir(parents=True)
+          flat = project.get("archive_layout", "kit") == "flat"
+          binary_directory = stage if flat else stage / "bin"
+          binary_directory.mkdir(parents=True)
           for binary in config["binaries"]:
               filename = binary["name"] + (".exe" if "windows" in target_name else "")
-              shutil.copy2(Path("target") / target_name / "release" / filename, stage / "bin" / filename)
+              shutil.copy2(Path("target") / target_name / "release" / filename, binary_directory / filename)
               for bundled_path in binary.get("bundled_paths", []):
                   source = Path(bundled_path["source"])
                   destination = stage / bundled_path["destination"]
                   destination.parent.mkdir(parents=True, exist_ok=True)
                   shutil.copytree(source, destination, dirs_exist_ok=True)
+          if config.get("documentation_bundle"):
+              subprocess.check_call(
+                  [
+                      "python3",
+                      ".github/scripts/release_artifacts.py",
+                      "stage-documentation-bundle",
+                      "--manifest",
+                      os.environ["RELEASE_ARTIFACT_MANIFEST"],
+                      "--stage-directory",
+                      str(stage),
+                  ]
+              )
           archive = Path(f"{stage}.{target['archive']}")
           if target["archive"] == "tar.gz":
               with tarfile.open(archive, "w:gz") as output:
-                  output.add(stage, arcname=stage.name)
+                  if flat:
+                      for item in sorted(stage.iterdir()):
+                          output.add(item, arcname=item.name)
+                  else:
+                      output.add(stage, arcname=stage.name)
           elif target["archive"] == "zip":
               with zipfile.ZipFile(archive, "w", zipfile.ZIP_DEFLATED) as output:
                   for item in stage.rglob("*"):
                       if item.is_file():
-                          output.write(item, item.relative_to(stage.parent))
+                          output.write(item, item.relative_to(stage if flat else stage.parent))
           else:
               raise SystemExit(f"unsupported archive type: {target['archive']}")
+          if config.get("documentation_bundle"):
+              subprocess.check_call(
+                  [
+                      "python3",
+                      ".github/scripts/release_artifacts.py",
+                      "validate-release-archive",
+                      "--manifest",
+                      os.environ["RELEASE_ARTIFACT_MANIFEST"],
+                      "--archive",
+                      str(archive),
+                  ]
+                  + (["--windows"] if "windows" in target_name else [])
+              )
           with Path(os.environ["GITHUB_ENV"]).open("a", encoding="utf-8") as env:
               env.write(f"ARCHIVE={archive}\n")
           PY

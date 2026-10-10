@@ -179,6 +179,53 @@ softprops/action-gh-release v3 (Node24; runner >=2.327.1). Composite Rust/tool
 installation actions retain their existing pins. These action upgrades and npm
 mocks do not constitute the live release qualification required above.
 
+## Archive layout
+
+By default archives are `<prefix>_<version>_<target>/bin/<binary>` under one
+top-level directory (`archive_layout = "kit"`, or omitted). A consumer whose
+installers expect binaries at the archive root declares
+`"project": {"archive_layout": "flat"}` in its input: binaries and any
+`bundled_paths` / documentation bundle are placed at the archive root with no
+top-level directory, under the same asset name. This applies to
+`release.yml`, `prerelease-archive.yml`, `validate-release-archive`, the
+Homebrew `binary_paths` and the prerelease skill. Fields that name archive
+paths (`renderer_archive_path`, the Scoop `binary`) remain consumer-declared
+and must match the chosen layout. With the field omitted nothing changes and
+the rendered manifest is byte-identical.
+
+## Optional documentation bundle
+
+A consumer may declare a documentation directory that ships inside every
+release archive. The table is optional; without it nothing changes and the
+rendered manifest carries no `[documentation_bundle]` table.
+
+```json
+"documentation_bundle": {
+  "source_directory": "docs/bundle",
+  "package_directory": "share/docs",
+  "required_files": ["README.md", "guides/start.md"]
+}
+```
+
+- `source_directory` and `package_directory` are normalized relative POSIX paths
+  (no `.`, `..`, empty parts, trailing slash, backslash or drive); the package
+  directory must not be `bin` or overlap a `bundled_paths` destination, and the
+  source tree must not contain symlinks; `required_files` are relative to both and must be
+  exactly the files in the source directory (no missing, no extra).
+- The packaging step runs `release_artifacts.py stage-documentation-bundle`
+  (validate, then copy to `<stage>/<package_directory>`) for every target,
+  in both `release.yml` and `prerelease-archive.yml`.
+- After the archive is created, `validate-release-archive` checks that it
+  holds every release binary and exactly the declared bundle. When a bundle is
+  declared, validation is strict archive-wide: no symlinks, hardlinks,
+  duplicate members, `./`-prefixed, absolute, `..` or backslash names anywhere
+  in the archive (tar.gz and zip;
+  `--windows` expects `.exe` binaries).
+- `validate-documentation-bundle --documentation-directory <dir>` validates a
+  source tree on its own, for consumer lint recipes.
+
+Consumer-specific checks (link checks, guide indexes) stay in the consumer.
+
 ## Explicit wheel platforms and standalone crates
 
 Existing `python_distributions[].wheels` runner strings retain their matrix and

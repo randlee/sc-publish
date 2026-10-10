@@ -11,7 +11,7 @@ import shutil
 import sys
 import tempfile
 import tomllib
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -132,6 +132,22 @@ def _require_entries(
     return entries
 
 
+def _require_bundle_path(value: str, label: str) -> None:
+    """Mirror release_documentation.require_safe_relative_path (normalized relative POSIX path)."""
+    path = PurePosixPath(value)
+    if (
+        path.is_absolute()
+        or path.as_posix() != value
+        or value == "."
+        or ".." in path.parts
+        or "\\" in value
+        or ":" in value
+    ):
+        raise argparse.ArgumentTypeError(
+            f"documentation_bundle.{label} must be a normalized relative path: {value!r}"
+        )
+
+
 def load_install_values(path: Path) -> dict[str, object]:
     """Load the complete, caller-declared publish manifest contract."""
     try:
@@ -210,6 +226,33 @@ def load_install_values(path: Path) -> dict[str, object]:
                 bundled.get("homebrew_destination_components"),
                 "bundled_paths.homebrew_destination_components",
             )
+
+    if "documentation_bundle" in values:
+        bundle = _require_mapping(values["documentation_bundle"], "documentation_bundle")
+        for field in ("source_directory", "package_directory"):
+            _require_bundle_path(_require_string(bundle.get(field), f"documentation_bundle.{field}"), field)
+        files = _require_string_array(bundle.get("required_files"), "documentation_bundle.required_files")
+        if not files:
+            raise argparse.ArgumentTypeError("documentation_bundle.required_files must not be empty")
+        for entry in files:
+            _require_bundle_path(entry, "required_files entry")
+        if len(set(files)) != len(files):
+            raise argparse.ArgumentTypeError("documentation_bundle.required_files must not contain duplicates")
+        from release_documentation import package_directory_conflict
+
+        binaries = values.get("release_binaries", [])
+        conflict = package_directory_conflict(
+            bundle["package_directory"],
+            _require_mapping(values.get("project", {}), "project").get("archive_layout", "kit"),
+            {entry["name"] for entry in binaries},
+            [
+                bundled["destination"]
+                for entry in binaries
+                for bundled in entry.get("bundled_paths", [])
+            ],
+        )
+        if conflict:
+            raise argparse.ArgumentTypeError(f"documentation_bundle.package_directory {conflict}")
 
     if "prerelease" in values:
         prerelease = _require_mapping(values["prerelease"], "prerelease")
@@ -337,6 +380,9 @@ def load_install_values(path: Path) -> dict[str, object]:
         for field in fields:
             _require_string(channel.get(field), f"channels.{name}.{field}")
 
+    if "archive_layout" in project and project["archive_layout"] not in ("kit", "flat"):
+        raise argparse.ArgumentTypeError("project.archive_layout must be 'kit' or 'flat'")
+
     if "homebrew" in channels or "scoop" in channels:
         _require_string(project.get("renderer_archive_path"), "project.renderer_archive_path")
     return values
@@ -425,9 +471,18 @@ def template_values(values: dict[str, object]) -> dict[str, object]:
     template_project = _toml_scalars(project)
     template_project.setdefault("readme_dependency_crate", "")
     template_project.setdefault("renderer_archive_path", "")
+    template_project.setdefault("archive_layout", "")
     template_project.setdefault("workspace_toml", "")
     template_project.setdefault("rust_toolchain", "")
     template_project.setdefault("sc_lint_source_revision", "")
+    documentation_bundle = values.get("documentation_bundle")
+    template_documentation_bundle = (
+        _toml_scalars(
+            _require_mapping(documentation_bundle, "documentation_bundle"), ("required_files",)
+        )
+        if documentation_bundle
+        else {"source_directory": "", "package_directory": "", "required_files": "[]"}
+    )
     prerelease = values.get("prerelease")
     template_prerelease = (
         _toml_scalars(
@@ -460,9 +515,12 @@ def template_values(values: dict[str, object]) -> dict[str, object]:
         "prerelease": template_prerelease,
         "has_readme_dependency_crate": "readme_dependency_crate" in project,
         "has_renderer_archive_path": "renderer_archive_path" in project,
+        "has_archive_layout": "archive_layout" in project,
         "has_workspace_toml": "workspace_toml" in project,
         "has_rust_toolchain": "rust_toolchain" in project,
         "has_sc_lint_source_revision": "sc_lint_source_revision" in project,
+        "documentation_bundle": template_documentation_bundle,
+        "has_documentation_bundle": "documentation_bundle" in values,
         "has_prerelease": "prerelease" in values,
         **{f"has_channel_{name}": name in channels for name in CHANNEL_NAMES},
     }

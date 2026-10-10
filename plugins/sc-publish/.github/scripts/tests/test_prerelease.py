@@ -176,6 +176,26 @@ class PrereleaseTests(unittest.TestCase):
                 self.assertTrue((root / "selector" / "fixture").is_symlink())
                 download.assert_called_once()
 
+    def test_install_stages_a_flat_layout_archive(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            values = manifest(root)
+            values["project"] = {"archive_prefix": "fixture", "archive_layout": "flat"}
+            archive = root / "flat.zip"
+            with zipfile.ZipFile(archive, "w") as bundle:
+                bundle.writestr("fixture", "binary")
+            stage = root / "builds" / "v1.5.11"
+            with (
+                mock.patch.object(PRERELEASE, "select_release", return_value=("1.5.11", {})),
+                mock.patch.object(PRERELEASE, "download_checked_archive", return_value=archive),
+                mock.patch.object(PRERELEASE.platform, "system", return_value="Linux"),
+            ):
+                version, installed = PRERELEASE.install(values, "1.5.11")
+                PRERELEASE.install(values, "1.5.11")
+            self.assertEqual((version, installed), ("1.5.11", stage))
+            self.assertTrue((stage / "fixture").is_file())
+            self.assertTrue((root / "selector" / "fixture").is_symlink())
+
     def test_checksum_verification_fails_closed(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             archive = Path(directory) / "fixture.zip"
