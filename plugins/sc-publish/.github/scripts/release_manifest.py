@@ -389,6 +389,8 @@ def _require_project(manifest: dict) -> dict:
         ("name", "archive_prefix", "description", "homepage", "license"),
         "[project]",
     )
+    if project.get("archive_layout", "kit") not in ("kit", "flat"):
+        raise SystemExit("[project].archive_layout must be 'kit' or 'flat'")
     return project
 
 

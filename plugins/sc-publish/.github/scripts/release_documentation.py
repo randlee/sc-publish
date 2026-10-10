@@ -32,7 +32,15 @@ def documentation_bundle(manifest: dict) -> dict | None:
     for key in ("source_directory", "package_directory"):
         require_safe_relative_path(bundle[key], f"[documentation_bundle].{key}")
     package = bundle["package_directory"]
-    if package == RESERVED_ROOT or package.startswith(RESERVED_ROOT + "/"):
+    if archive_layout(manifest) == FLAT_LAYOUT:
+        first = PurePosixPath(package).parts[0]
+        names = {binary["name"] for binary in manifest.get("release_binaries", [])}
+        if first in names or first.removesuffix(".exe") in names:
+            raise SystemExit(
+                "[documentation_bundle].package_directory must not collide with a "
+                f"release binary in a flat archive: {package!r}"
+            )
+    elif package == RESERVED_ROOT or package.startswith(RESERVED_ROOT + "/"):
         raise SystemExit(f"[documentation_bundle].package_directory must not use {RESERVED_ROOT}/")
     for binary in manifest.get("release_binaries", []):
         for bundled in binary.get("bundled_paths", []):
@@ -53,6 +61,16 @@ def documentation_bundle(manifest: dict) -> dict | None:
 
 
 RESERVED_ROOT = "bin"
+KIT_LAYOUT = "kit"
+FLAT_LAYOUT = "flat"
+
+
+def archive_layout(manifest: dict) -> str:
+    """Return [project].archive_layout: "kit" (default, <root>/bin/...) or "flat"."""
+    layout = manifest.get("project", {}).get("archive_layout", KIT_LAYOUT)
+    if layout not in (KIT_LAYOUT, FLAT_LAYOUT):
+        raise SystemExit(f"[project].archive_layout must be 'kit' or 'flat', got {layout!r}")
+    return layout
 
 
 def _overlaps(left: str, right: str) -> bool:
@@ -135,20 +153,22 @@ def validate_release_archive(
     manifest: dict, binaries: list[dict], archive: Path, *, windows: bool = False
 ) -> None:
     """Check an archive holds every release binary and, when declared, exactly the bundle."""
-    members = _archive_members(archive)
-    roots = {member.split("/", 1)[0] for member in members}
-    if len(roots) != 1:
-        raise SystemExit(
-            f"archive must contain a single top-level directory, found {sorted(roots)}"
-        )
-    root = roots.pop()
-    relative = {member.split("/", 1)[1] for member in members if "/" in member}
+    members = [name.removeprefix("./") for name in _archive_members(archive)]
     suffix = ".exe" if windows else ""
-    missing = [
-        f"bin/{binary['name']}{suffix}"
-        for binary in binaries
-        if f"bin/{binary['name']}{suffix}" not in relative
-    ]
+    if archive_layout(manifest) == FLAT_LAYOUT:
+        root = "<archive root>"
+        relative = set(members)
+        wanted = [f"{binary['name']}{suffix}" for binary in binaries]
+    else:
+        roots = {member.split("/", 1)[0] for member in members}
+        if len(roots) != 1:
+            raise SystemExit(
+                f"archive must contain a single top-level directory, found {sorted(roots)}"
+            )
+        root = roots.pop()
+        relative = {member.split("/", 1)[1] for member in members if "/" in member}
+        wanted = [f"bin/{binary['name']}{suffix}" for binary in binaries]
+    missing = [name for name in wanted if name not in relative]
     if missing:
         raise SystemExit(f"{archive}: missing release binaries: {missing}")
     bundle = documentation_bundle(manifest)

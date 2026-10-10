@@ -12,6 +12,7 @@ required_variables:
   - project.license
   - project.readme_dependency_crate
   - project.renderer_archive_path
+  - project.archive_layout
   - project.workspace_toml
   - project.rust_toolchain
   - project.sc_lint_source_revision
@@ -57,6 +58,7 @@ required_variables:
   - channels.winget.installer_target
   - has_readme_dependency_crate
   - has_renderer_archive_path
+  - has_archive_layout
   - has_workspace_toml
   - has_rust_toolchain
   - has_sc_lint_source_revision
@@ -83,6 +85,9 @@ readme_dependency_crate = {{ project.readme_dependency_crate }}
 {% endif %}
 {% if has_renderer_archive_path %}
 renderer_archive_path = {{ project.renderer_archive_path }}
+{% endif %}
+{% if has_archive_layout %}
+archive_layout = {{ project.archive_layout }}
 {% endif %}
 {% if has_workspace_toml %}
 workspace_toml = {{ project.workspace_toml }}

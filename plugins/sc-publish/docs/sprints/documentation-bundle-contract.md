@@ -49,3 +49,13 @@ consumer-specific logic in the kit. Tracking beads (sc-lint): lint-spx.43 (imple
 ## QA-1 fixes (SP-B1..B2, SP-I1..I4, SP-M1..M4)
 
 Addressed on this branch; status returns to `complete` after QA-2 passes.
+
+## Archive layout option (`[project].archive_layout`)
+
+Added on request of the first consumer (an installer shipped in an earlier
+release extracts only flat archives, so a layout change would break upgrades).
+`"kit"` (default, unchanged) or `"flat"`; absent renders byte-identically
+(golden test). Covered: both workflow packagers, `validate-release-archive`
+(tar.gz and zip, `./`-prefixed members), Homebrew `binary_paths`, the
+prerelease skill, install-time validation, and package-directory collision with
+a binary name in flat archives.

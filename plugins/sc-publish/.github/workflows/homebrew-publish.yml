@@ -173,7 +173,10 @@ jobs:
                   "test_binary": formula["test_binary"],
                   "test_command": formula["test_command"],
                   "test_output": formula["test_output"],
-                  "binary_paths": [f"bin/{binary}" for binary in binaries],
+                  "binary_paths": [
+                      binary if project.get("archive_layout", "kit") == "flat" else f"bin/{binary}"
+                      for binary in binaries
+                  ],
                   "bundled_paths": bundled_paths,
               }
               variables_path = Path(f"homebrew-vars-{index}.json")

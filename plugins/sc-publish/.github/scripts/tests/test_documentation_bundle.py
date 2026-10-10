@@ -16,6 +16,7 @@ import unittest
 import warnings
 import zipfile
 from pathlib import Path
+from types import MappingProxyType
 
 SCRIPTS = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(SCRIPTS))
@@ -395,8 +396,10 @@ class GoldenAndCliTests(unittest.TestCase):
         rendered = render_text(InstallValuesTests.valid_values())
         self.assertEqual(rendered, GOLDEN.read_text(encoding="utf-8"))
 
-    def declared_manifest(self, root: Path, targets: list[dict]) -> Path:
+    def declared_manifest(self, root: Path, targets: list[dict], layout: str | None = None) -> Path:
         values = InstallValuesTests.valid_values()
+        if layout is not None:
+            values["project"]["archive_layout"] = layout
         values["release_targets"] = targets
         values["documentation_bundle"] = {
             "source_directory": "bundle-src",
@@ -409,13 +412,23 @@ class GoldenAndCliTests(unittest.TestCase):
         return manifest_path
 
     def test_cli_round_trip_for_tar_gz_and_zip_through_the_workflow_packager(self) -> None:
+        self.round_trip(None)
+
+    def test_cli_round_trip_explicit_kit_layout(self) -> None:
+        self.round_trip("kit")
+
+    def test_cli_round_trip_flat_layout(self) -> None:
+        self.round_trip("flat")
+
+    def round_trip(self, layout: str | None) -> None:
+        flat = layout == "flat"
         targets = [
             {"target": "x86_64-unknown-linux-gnu", "os": "ubuntu-latest", "archive": "tar.gz"},
             {"target": "x86_64-pc-windows-msvc", "os": "windows-latest", "archive": "zip"},
         ]
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            manifest_path = self.declared_manifest(root, targets)
+            manifest_path = self.declared_manifest(root, targets, layout)
             shutil.copytree(
                 SCRIPTS, root / ".github/scripts", ignore=shutil.ignore_patterns("tests", "__pycache__")
             )
@@ -461,7 +474,15 @@ class GoldenAndCliTests(unittest.TestCase):
                 else:
                     with tarfile.open(archive) as opened_tar:
                         names = opened_tar.getnames()
-                self.assertIn(f"{archive.name.removesuffix('.' + target['archive'])}/share/docs/README.md", names)
+                root_name = archive.name.removesuffix("." + target["archive"])
+                binary_name = "example.exe" if "windows" in name else "example"
+                if flat:
+                    self.assertIn("share/docs/README.md", names)
+                    self.assertIn(binary_name, names)
+                    self.assertFalse(any(n.startswith(root_name) for n in names))
+                else:
+                    self.assertIn(f"{root_name}/share/docs/README.md", names)
+                    self.assertIn(f"{root_name}/bin/{binary_name}", names)
                 checked = run_script(
                     "validate-release-archive", "--manifest", str(manifest_path),
                     "--archive", str(archive), *(["--windows"] if archive.suffix == ".zip" else []),
@@ -472,7 +493,9 @@ class GoldenAndCliTests(unittest.TestCase):
                 "release-package-config", "--manifest", str(manifest_path),
                 "--target", "x86_64-unknown-linux-gnu",
             )
-            self.assertEqual(json.loads(config.stdout)["documentation_bundle"]["package_directory"], "share/docs")
+            payload = json.loads(config.stdout)
+            self.assertEqual(payload["documentation_bundle"]["package_directory"], "share/docs")
+            self.assertEqual(payload["project"].get("archive_layout"), layout)
             absent_text = render_text(InstallValuesTests.valid_values())
             absent = root / "release" / "absent.toml"
             absent.write_text(absent_text, encoding="utf-8")
@@ -486,6 +509,79 @@ class GoldenAndCliTests(unittest.TestCase):
             staged = run_script("stage-documentation-bundle", "--manifest", str(absent), "--stage-directory", str(stage))
             self.assertEqual(staged.returncode, 0, staged.stderr)
             self.assertEqual(list(stage.iterdir()), [])
+
+
+class FlatLayoutTests(unittest.TestCase):
+    FLAT = MappingProxyType(
+        {"project": {"archive_layout": "flat"}, "release_binaries": [{"name": "example"}]}
+    )
+
+    def flat_manifest(self) -> dict:
+        return {**manifest(), **self.FLAT}
+
+    def test_layout_values(self) -> None:
+        self.assertEqual(DOCS.archive_layout({}), "kit")
+        self.assertEqual(DOCS.archive_layout(self.FLAT), "flat")
+        with self.assertRaises(SystemExit):
+            DOCS.archive_layout({"project": {"archive_layout": "nested"}})
+
+    def test_flat_archives_validate_for_tar_and_zip(self) -> None:
+        members = ["example", *[f"share/docs/{n}" for n in BUNDLE["required_files"]]]
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            tar = root / "pkg.tar.gz"
+            make_tar(tar, members)
+            DOCS.validate_release_archive(self.flat_manifest(), BINARIES, tar)
+            dotted = root / "dotted.tar.gz"
+            make_tar(dotted, [f"./{n}" for n in members])
+            DOCS.validate_release_archive(self.flat_manifest(), BINARIES, dotted)
+            zipped = root / "pkg.zip"
+            make_zip(zipped, ["example.exe", *members[1:]])
+            DOCS.validate_release_archive(self.flat_manifest(), BINARIES, zipped, windows=True)
+            # A kit-layout archive is rejected under flat, and vice versa.
+            nested = root / "nested.tar.gz"
+            make_tar(nested, ["pkg/bin/example", *[f"pkg/share/docs/{n}" for n in BUNDLE["required_files"]]])
+            with self.assertRaises(SystemExit):
+                DOCS.validate_release_archive(self.flat_manifest(), BINARIES, nested)
+            with self.assertRaises(SystemExit):
+                DOCS.validate_release_archive(manifest(), BINARIES, tar)
+
+    def test_flat_archive_rejects_missing_binary_and_wrong_bundle(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            no_binary = root / "nobin.tar.gz"
+            make_tar(no_binary, [f"share/docs/{n}" for n in BUNDLE["required_files"]])
+            with self.assertRaises(SystemExit):
+                DOCS.validate_release_archive(self.flat_manifest(), BINARIES, no_binary)
+            extra = root / "extra.tar.gz"
+            make_tar(extra, ["example", "share/docs/stray.md",
+                             *[f"share/docs/{n}" for n in BUNDLE["required_files"]]])
+            with self.assertRaises(SystemExit):
+                DOCS.validate_release_archive(self.flat_manifest(), BINARIES, extra)
+
+    def test_flat_package_directory_cannot_collide_with_a_binary(self) -> None:
+        for directory in ("example", "example/docs", "example.exe"):
+            candidate = {
+                **self.FLAT,
+                "documentation_bundle": {**BUNDLE, "package_directory": directory},
+            }
+            with self.subTest(directory=directory), self.assertRaises(SystemExit):
+                DOCS.documentation_bundle(candidate)
+        flat_bin = {**self.FLAT, "documentation_bundle": {**BUNDLE, "package_directory": "bin"}}
+        self.assertIsNotNone(DOCS.documentation_bundle(flat_bin))
+
+    def test_install_validates_and_renders_the_layout(self) -> None:
+        values = InstallValuesTests.valid_values()
+        values["project"]["archive_layout"] = "nested"
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "input.json"
+            path.write_text(json.dumps(values), encoding="utf-8")
+            with self.assertRaises(argparse.ArgumentTypeError):
+                INSTALL.load_install_values(path)
+        values["project"]["archive_layout"] = "flat"
+        self.assertEqual(tomllib.loads(render_text(values))["project"]["archive_layout"], "flat")
+        del values["project"]["archive_layout"]
+        self.assertNotIn("archive_layout", tomllib.loads(render_text(values))["project"])
 
 
 def packager_python() -> str:
@@ -516,6 +612,18 @@ class WorkflowParityTests(unittest.TestCase):
         self.assertIn("stage-documentation-bundle", release[0])
         self.assertIn("validate-release-archive", release[1])
         self.assertIn("validate-release-archive", prerelease[1])
+
+    def test_homebrew_binary_paths_follow_the_archive_layout(self) -> None:
+        text = (PLUGIN_ROOT / ".github/workflows/homebrew-publish.yml").read_text(encoding="utf-8")
+        self.assertIn('binary if project.get("archive_layout", "kit") == "flat" else f"bin/{binary}"', text)
+
+    def test_release_and_prerelease_packagers_share_the_layout_logic(self) -> None:
+        for name in ("release.yml", "prerelease-archive.yml"):
+            text = (PLUGIN_ROOT / ".github/workflows" / name).read_text(encoding="utf-8")
+            self.assertIn('flat = project.get("archive_layout", "kit") == "flat"', text, name)
+            self.assertIn("binary_directory = stage if flat else stage / \"bin\"", text, name)
+            self.assertIn("output.add(item, arcname=item.name)", text, name)
+            self.assertIn("item.relative_to(stage if flat else stage.parent)", text, name)
 
 
 if __name__ == "__main__":

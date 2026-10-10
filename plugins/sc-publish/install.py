@@ -368,6 +368,9 @@ def load_install_values(path: Path) -> dict[str, object]:
         for field in fields:
             _require_string(channel.get(field), f"channels.{name}.{field}")
 
+    if "archive_layout" in project and project["archive_layout"] not in ("kit", "flat"):
+        raise argparse.ArgumentTypeError("project.archive_layout must be 'kit' or 'flat'")
+
     if "homebrew" in channels or "scoop" in channels:
         _require_string(project.get("renderer_archive_path"), "project.renderer_archive_path")
     return values
@@ -456,6 +459,7 @@ def template_values(values: dict[str, object]) -> dict[str, object]:
     template_project = _toml_scalars(project)
     template_project.setdefault("readme_dependency_crate", "")
     template_project.setdefault("renderer_archive_path", "")
+    template_project.setdefault("archive_layout", "")
     template_project.setdefault("workspace_toml", "")
     template_project.setdefault("rust_toolchain", "")
     template_project.setdefault("sc_lint_source_revision", "")
@@ -499,6 +503,7 @@ def template_values(values: dict[str, object]) -> dict[str, object]:
         "prerelease": template_prerelease,
         "has_readme_dependency_crate": "readme_dependency_crate" in project,
         "has_renderer_archive_path": "renderer_archive_path" in project,
+        "has_archive_layout": "archive_layout" in project,
         "has_workspace_toml": "workspace_toml" in project,
         "has_rust_toolchain": "rust_toolchain" in project,
         "has_sc_lint_source_revision": "sc_lint_source_revision" in project,
