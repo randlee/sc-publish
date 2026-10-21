@@ -1053,6 +1053,8 @@ def test_no_single_repo_concerns_leak_into_kit_workflows_actions_or_scripts() ->
         "worker_result.py",
         "release_python.py",
         "release_gate.sh",
+        "release-preflight-docli.sh",
+        "run-consumer-preflight.sh",
     )
     github_root = repo_root() / ".github"
     files = [
@@ -2308,7 +2310,7 @@ def test_release_preflight_registry_checks_execute_preserved_channel_exception(
     )
     registry_state = run_release_preflight_registry_step(
         tmp_path,
-        release_preflight_step_shell("registry_state", "package_checks"),
+        release_preflight_step_shell("registry_state", "consumer_preflight"),
         published=published,
         already_published_channels=already_published_channels,
     )
@@ -3044,6 +3046,9 @@ def test_release_preflight_collects_independent_failures_before_denial() -> None
     assert "failures=()" in preflight_text
     assert "steps.secret_plan.outcome == 'success'" in preflight_text
     assert "Verify registry versions and new names" in preflight_text
+    assert "Run consumer publish preflight checks" in preflight_text
+    assert "run-consumer-preflight.sh" in preflight_text
+    assert "consumer-preflight" in preflight_text
     assert "public-registry-check-plan" in preflight_text
     assert preflight_text.count("registry-status --url") == 2
     assert "status_code()" not in preflight_text
