@@ -20,8 +20,8 @@ Installation is three commands, run from the consumer repository root:
 # 1. Provision the exact pinned sc-compose 1.5.0 renderer wheel into a virtualenv.
 python plugins/sc-publish/.github/scripts/bootstrap_sc_compose.py --venv <venv>
 
-# 2. Install: copy every kit file byte-for-byte and render the two release
-#    manifests from your complete, caller-owned consumer input JSON.
+# 2. Install: copy every kit file byte-for-byte and render the release
+#    manifests plus publish-preflight.toml from your consumer input JSON.
 <venv>/bin/python plugins/sc-publish/install.py --input <consumer-input.json> <repo>
 
 # 3. Verify: a repeat dry-run must report no drift (exit 0).
@@ -31,11 +31,20 @@ python plugins/sc-publish/.github/scripts/bootstrap_sc_compose.py --venv <venv>
 The consumer input JSON is the single reviewable declaration of everything
 repository-specific: project identity, release targets, crates, release
 binaries, Python distributions, and the post-release channels the repository
-actually uses. Only two files are rendered from it —
-`release/publish-artifacts.toml` and `release/publish-channel-contracts.toml`;
-everything else is a shared verbatim copy. Re-running the installer after a
-kit upgrade re-synchronizes the copies; `--dry-run` exits 1 and prints a diff
-whenever a consumer file differs from the kit.
+actually uses. Three files are rendered from it —
+`release/publish-artifacts.toml`, `release/publish-channel-contracts.toml`, and
+`release/publish-preflight.toml` (repository-specific release checks); everything
+else is a shared verbatim copy. Re-running the installer after a kit upgrade
+re-synchronizes the copies; `--dry-run` exits 1 and prints a diff whenever a
+consumer file differs from the kit.
+
+**Customer-facing CLI documentation:** the kit does not require
+[sc-docli](https://crates.io/crates/sc-docli), but every consumer that ships a
+user-facing CLI **should** opt in via the optional `"docli"` object in consumer
+input JSON so Release Preflight regenerates CLI HTML and fails on drift — not
+on every sprint PR CI. See
+`docs/consumer-preflight-and-docli.md` for `preflight_checks`, the docli
+shape, and the recommended workflow.
 
 ## Pinning, bootstrap, and qualification
 
