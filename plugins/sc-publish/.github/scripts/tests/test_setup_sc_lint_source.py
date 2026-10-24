@@ -81,7 +81,7 @@ class SourceSetupTests(unittest.TestCase):
             (root/'.sc-lint').mkdir()
             (root/'.sc-lint/source-install.json').write_text('{}')
             env = dict(os.environ, GITHUB_WORKSPACE=str(root), GITHUB_ENV=str(root/'env'), SC_LINT_SOURCE_REVISION_INPUT='')
-            result = subprocess.run([sys.executable, SCRIPT, 'resolve'], env=env, capture_output=True, text=True)
+            result = subprocess.run([sys.executable, SCRIPT, 'resolve'], env=env, capture_output=True, text=True, timeout=30)
             self.assertNotEqual(result.returncode, 0)
             self.assertIn('cannot reuse', result.stderr)
             self.assertFalse((root/'env').exists())
@@ -105,7 +105,7 @@ class SourceSetupTests(unittest.TestCase):
                 script.write_text(step['run'])
                 env = dict(os.environ, GITHUB_ENV=str(root/'env'), SC_LINT_SOURCE_REVISION_INPUT='')
                 cmd = [shell, '-NoProfile', '-File', str(script)] if label == 'Windows' else [shell, str(script)]
-                result = subprocess.run(cmd, cwd=root, env=env, capture_output=True, text=True)
+                result = subprocess.run(cmd, cwd=root, env=env, capture_output=True, text=True, timeout=30)
                 self.assertEqual(result.returncode, 0, result.stderr)
                 self.assertEqual((root/'env').read_text().strip(), 'SC_LINT_SOURCE_REVISION=')
 

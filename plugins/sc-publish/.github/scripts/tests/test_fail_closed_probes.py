@@ -56,6 +56,7 @@ def run_probe_script(
         text=True,
         capture_output=True,
         check=False,
+        timeout=30,
         env={
             **os.environ,
             "PATH": f"{bin_dir}:{os.environ['PATH']}",

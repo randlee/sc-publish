@@ -151,6 +151,7 @@ class InstallValuesTests(unittest.TestCase):
             check=False,
             capture_output=True,
             text=True,
+            timeout=30,
         )
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("--input INSTALL.json", result.stdout)
@@ -205,13 +206,13 @@ class InstallValuesTests(unittest.TestCase):
             values["project"]["sc_lint_source_revision"] = "a" * 40
             contract = root / "install.json"
             contract.write_text(json.dumps(values))
-            subprocess.run([sys.executable, INSTALLER, "--input", contract, consumer], check=True, capture_output=True)
-            result = subprocess.run([sys.executable, INSTALLER, "--dry-run", "--input", contract, consumer], capture_output=True, text=True)
+            subprocess.run([sys.executable, INSTALLER, "--input", contract, consumer], check=True, capture_output=True, timeout=30)
+            result = subprocess.run([sys.executable, INSTALLER, "--dry-run", "--input", contract, consumer], capture_output=True, text=True, timeout=30)
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
             import os
             env = dict(os.environ, GITHUB_WORKSPACE=str(consumer), GITHUB_ENV=str(root / "env"), SC_LINT_SOURCE_REVISION_INPUT="")
             helper = consumer / ".github/scripts/setup_sc_lint_source.py"
-            result = subprocess.run([sys.executable, helper, "resolve"], env=env, capture_output=True, text=True)
+            result = subprocess.run([sys.executable, helper, "resolve"], env=env, capture_output=True, text=True, timeout=30)
             self.assertEqual(result.returncode, 0, result.stderr)
             self.assertEqual((root / "env").read_text(), "SC_LINT_SOURCE_REVISION=" + "a" * 40 + "\n")
 
@@ -527,6 +528,7 @@ class InstallValuesTests(unittest.TestCase):
                 text=True,
                 capture_output=True,
                 check=False,
+                timeout=30,
             )
             self.assertEqual(helper.returncode, 0, helper.stderr)
             (consumer / "Cargo.toml").write_text(
@@ -583,6 +585,7 @@ class InstallValuesTests(unittest.TestCase):
                 text=True,
                 capture_output=True,
                 check=False,
+                timeout=30,
             )
             self.assertEqual(order.returncode, 0, order.stderr)
             self.assertIn("matches the workspace dependency graph", order.stdout)
@@ -591,6 +594,7 @@ class InstallValuesTests(unittest.TestCase):
                 text=True,
                 capture_output=True,
                 check=False,
+                timeout=30,
             )
             self.assertEqual(gate_check.returncode, 0, gate_check.stderr)
 

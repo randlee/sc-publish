@@ -273,7 +273,7 @@ def test_download_step_requires_immutable_release(tmp_path, immutable, expected)
     gh.write_text('#!/bin/sh\nif [ "$1" = api ]; then\n  printf \'%s\\n\' \'{"immutable":' + str(immutable).lower() + ',"draft":false}\'\nelse\n  touch downloaded\nfi\n')
     gh.chmod(0o755)
     env = {**os.environ, 'PATH': str(tmp_path) + os.pathsep + os.environ['PATH'], 'RELEASE_TAG': 'v1.2.3', 'RELEASE_REPOSITORY': 'example/project'}
-    result = subprocess.run(['bash', '-c', step['run']], cwd=tmp_path, env=env, capture_output=True)
+    result = subprocess.run(['bash', '-c', step['run']], cwd=tmp_path, env=env, capture_output=True, timeout=30)
     assert result.returncode == expected
     assert (tmp_path / 'downloaded').exists() is immutable
 
@@ -286,7 +286,7 @@ def test_lockstep_blocks_unsuitable_npm_sources_before_tag(tmp_path, override):
     (tmp_path / 'Cargo.toml').write_text('[workspace.package]\nversion="1.2.3"\n')
     manifest = tmp_path / 'publish.toml'
     manifest.write_text('[[npm_packages]]\nname="@example/client"\nsource="bindings/client"\n[channels.npm]\nworkflow="npm-publish.yml"\ndispatch_inputs={}\n')
-    result = subprocess.run([sys.executable,str(INSTALL.PACKAGE_ROOT/'.github/scripts/release_artifacts.py'),'verify-version-lockstep','--manifest',str(manifest),'--workspace-toml',str(tmp_path/'Cargo.toml')],cwd=tmp_path,capture_output=True,text=True)
+    result = subprocess.run([sys.executable,str(INSTALL.PACKAGE_ROOT/'.github/scripts/release_artifacts.py'),'verify-version-lockstep','--manifest',str(manifest),'--workspace-toml',str(tmp_path/'Cargo.toml')],cwd=tmp_path,capture_output=True,text=True,timeout=30)
     assert result.returncode != 0
     assert 'source npm package' in result.stderr
 

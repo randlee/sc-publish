@@ -71,7 +71,7 @@ class PrereleaseTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             write_manifest(root)
-            result = subprocess.run([sys.executable, str(SCRIPT), "--manifest", "release/publish-artifacts.toml", "--publish", "--dry-run"], cwd=root, text=True, capture_output=True, check=False)
+            result = subprocess.run([sys.executable, str(SCRIPT), "--manifest", "release/publish-artifacts.toml", "--publish", "--dry-run"], cwd=root, text=True, capture_output=True, check=False, timeout=30)
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("would create tag: prerelease/v1.5.11", result.stdout)
         self.assertIn("would wait for prerelease-archive.yml", result.stdout)
@@ -80,7 +80,7 @@ class PrereleaseTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             write_manifest(root)
-            result = subprocess.run([sys.executable, str(SCRIPT), "--manifest", "release/publish-artifacts.toml", "--publish"], cwd=root, text=True, capture_output=True, check=False)
+            result = subprocess.run([sys.executable, str(SCRIPT), "--manifest", "release/publish-artifacts.toml", "--publish"], cwd=root, text=True, capture_output=True, check=False, timeout=30)
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("authorization", result.stderr)
 
@@ -101,6 +101,7 @@ class PrereleaseTests(unittest.TestCase):
                 text=True,
                 capture_output=True,
                 check=False,
+                timeout=30,
             )
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("would create tag: prerelease/v1.5.11", result.stdout)
@@ -151,6 +152,7 @@ class PrereleaseTests(unittest.TestCase):
                 text=True,
                 capture_output=True,
                 check=False,
+                timeout=30,
             )
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("unrecognized arguments: 1.5.11", result.stderr)
@@ -348,6 +350,7 @@ class PrereleaseTests(unittest.TestCase):
             text=True,
             capture_output=True,
             check=False,
+            timeout=30,
         )
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("--publish", result.stdout)
