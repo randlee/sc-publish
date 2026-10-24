@@ -927,7 +927,7 @@ def test_crates_leg_is_separate_and_independently_retryable() -> None:
     crates_text = crates_publish_workflow_text()
 
     # The GitHub Release leg must not depend on crates.io publication.
-    assert "needs: [gate-and-tag, build, build-python-wheels, build-python-sdists, build-npm]" in release_text
+    assert "needs: [gate-and-tag, build, build-workspace-source, build-python-wheels, build-python-sdists, build-npm]" in release_text
     assert "needs: [gate-and-tag, build, publish," not in release_text
 
     assert "workflow_dispatch:" in crates_text
@@ -2505,7 +2505,7 @@ def test_root_release_workflow_threads_retry_provenance_and_builds_from_main() -
     assert 'git tag "$tag" "$main_sha"' in workflow
     assert "build_ref: ${{ steps.release-ref.outputs.build_ref }}" in workflow
     assert workflow.count('echo "build_ref=$main_sha" >> "$GITHUB_OUTPUT"') == 1
-    assert workflow.count("needs.gate-and-tag.outputs.build_ref") == 10
+    assert workflow.count("needs.gate-and-tag.outputs.build_ref") == 11
     assert "gate-and-tag.outputs.release_ref" not in workflow
     assert "ref: ${{ needs.gate-and-tag.outputs.release_tag }}" not in workflow
     assert "ref: ${{ needs.gate-and-tag.outputs.release_ref }}" not in workflow
@@ -3632,21 +3632,133 @@ def test_all_cargo_publication_and_package_checks_use_manifest_path():
     assert 'cargo package -p' not in text
 
 
-def test_package_only_release_has_no_binary_asset_expectations(tmp_path):
-    workspace, manifest = write_repo_fixture(tmp_path, manifest_wheels=["ubuntu-latest"])
-    text = manifest.read_text()
+def _package_only_manifest(manifest: Path) -> None:
     import re
-    text = re.sub(r'\[\[release_binaries\]\]\nname = "[^"]+"\n', '', text)
-    text = text.split('[channels.homebrew]', 1)[0]
-    manifest.write_text(text)
-    result = run_fixture_command(tmp_path, 'validate-manifest', '--workspace-toml', str(workspace), manifest=manifest)
+
+    text = manifest.read_text(encoding="utf-8")
+    text = re.sub(r'\[\[release_binaries\]\]\nname = "[^"]+"\n', "", text)
+    text = text.split("[channels.homebrew]", 1)[0]
+    manifest.write_text(text, encoding="utf-8")
+
+
+def test_package_only_release_plans_workspace_source_archive_without_binary_assets(tmp_path):
+    workspace, manifest = write_repo_fixture(tmp_path, manifest_wheels=["ubuntu-latest"])
+    _package_only_manifest(manifest)
+    result = run_fixture_command(tmp_path, "validate-manifest", "--workspace-toml", str(workspace), manifest=manifest)
     assert result.returncode == 0, result.stderr
-    result = run_fixture_command(tmp_path, 'build-plan', manifest=manifest)
-    assert json.loads(result.stdout)['has_release_binaries'] is False
-    assert json.loads(result.stdout)['has_python_wheels'] is True
-    result = run_fixture_command(tmp_path, 'release-asset-patterns', manifest=manifest)
-    assert result.returncode == 0
-    assert result.stdout == ''
+    result = run_fixture_command(tmp_path, "build-plan", manifest=manifest)
+    assert result.returncode == 0, result.stderr
+    plan = json.loads(result.stdout)
+    assert plan["has_release_binaries"] is False
+    assert plan["has_python_wheels"] is True
+    assert plan["has_workspace_source_archive"] is True
+    assert plan["workspace_source_archive"] == "fixture-{version}-source.tar.gz"
+    assert plan["workspace_source_runner"] == "ubuntu-latest"
+    result = run_fixture_command(tmp_path, "release-asset-patterns", manifest=manifest)
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.splitlines() == [r"^fixture-.*-source\.tar\.gz$"]
+
+
+def test_package_only_release_without_linux_row_skips_source_archive(tmp_path):
+    workspace, manifest = write_repo_fixture(tmp_path, manifest_wheels=["ubuntu-latest"])
+    _package_only_manifest(manifest)
+    manifest.write_text(
+        manifest.read_text(encoding="utf-8").replace(
+            'target = "x86_64-unknown-linux-gnu"\nos = "ubuntu-latest"\narchive = "tar.gz"\n',
+            'target = "x86_64-pc-windows-msvc"\nos = "windows-latest"\narchive = "zip"\n',
+            1,
+        ),
+        encoding="utf-8",
+    )
+    result = run_fixture_command(tmp_path, "validate-manifest", "--workspace-toml", str(workspace), manifest=manifest)
+    assert result.returncode == 0, result.stderr
+    plan = json.loads(run_fixture_command(tmp_path, "build-plan", manifest=manifest).stdout)
+    assert plan["has_workspace_source_archive"] is False
+    assert plan["workspace_source_archive"] == ""
+    patterns = run_fixture_command(tmp_path, "release-asset-patterns", manifest=manifest)
+    assert patterns.returncode == 0, patterns.stderr
+    assert "source.tar.gz" not in patterns.stdout
+
+
+def test_consumer_package_only_manifest_includes_workspace_source_archive() -> None:
+    import re
+
+    path = repo_root() / "release" / "publish-artifacts.toml"
+    if not path.is_file():
+        pytest.skip("package source has no consumer-specific rendered manifest")
+    manifest = tomllib.loads(path.read_text(encoding="utf-8"))
+    if manifest.get("release_binaries"):
+        pytest.skip("consumer publishes release binaries")
+    script = scripts_root() / "release_artifacts.py"
+    plan_result = subprocess.run(
+        [sys.executable, str(script), "build-plan", "--manifest", str(path)],
+        cwd=repo_root(),
+        text=True,
+        capture_output=True,
+        check=False,
+        timeout=TEST_COMMAND_TIMEOUT_SECONDS,
+    )
+    assert plan_result.returncode == 0, plan_result.stderr
+    plan = json.loads(plan_result.stdout)
+    prefix = manifest["project"]["archive_prefix"]
+    assert plan["has_release_binaries"] is False
+    assert plan["has_workspace_source_archive"] is True
+    assert plan["workspace_source_archive"] == f"{prefix}-{{version}}-source.tar.gz"
+    assert plan["workspace_source_runner"] == "ubuntu-latest"
+    patterns = subprocess.run(
+        [sys.executable, str(script), "release-asset-patterns", "--manifest", str(path)],
+        cwd=repo_root(),
+        text=True,
+        capture_output=True,
+        check=False,
+        timeout=TEST_COMMAND_TIMEOUT_SECONDS,
+    )
+    assert patterns.returncode == 0, patterns.stderr
+    assert rf"^{re.escape(prefix)}-.*-source\.tar\.gz$" in patterns.stdout.splitlines()
+
+
+def test_workspace_source_archive_shell_writes_linux_tarball(tmp_path: Path) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    _, manifest = write_repo_fixture(repo, manifest_wheels=["ubuntu-latest"], include_python=False)
+    _package_only_manifest(manifest)
+    scripts = repo / ".github" / "scripts"
+    scripts.mkdir(parents=True)
+    for source in scripts_root().glob("*.py"):
+        (scripts / source.name).write_text(source.read_text(encoding="utf-8"), encoding="utf-8")
+    git_fixture_command(repo, "init")
+    git_fixture_command(repo, "config", "user.email", "release-test@example.invalid")
+    git_fixture_command(repo, "config", "user.name", "Release Test")
+    git_fixture_command(repo, "add", ".")
+    git_fixture_command(repo, "commit", "-m", "fixture")
+    step = release_workflow_text().split("      - name: Package workspace source archive\n", 1)[1].split(
+        "      - name: Upload artifact\n", 1
+    )[0]
+    shell = step.split("        run: |\n", 1)[1]
+    lines = shell.splitlines()
+    assert all(not line or line.startswith("          ") for line in lines)
+    github_env = tmp_path / "github.env"
+    result = subprocess.run(
+        ["bash", "-c", "\n".join(line[10:] if line else "" for line in lines)],
+        cwd=repo,
+        env={
+            **os.environ,
+            "RELEASE_ARTIFACT_MANIFEST": str(manifest),
+            "RELEASE_VERSION": "1.2.3",
+            "GITHUB_ENV": str(github_env),
+        },
+        text=True,
+        capture_output=True,
+        check=False,
+        timeout=TEST_COMMAND_TIMEOUT_SECONDS,
+    )
+    assert result.returncode == 0, result.stderr
+    archive = repo / "fixture-1.2.3-source.tar.gz"
+    assert archive.is_file()
+    assert github_env.read_text(encoding="utf-8") == "ARCHIVE=fixture-1.2.3-source.tar.gz\n"
+    with tarfile.open(archive) as packaged:
+        names = packaged.getnames()
+    assert "fixture-1.2.3/Cargo.toml" in names
 
 
 @pytest.mark.parametrize("helper", ["artifact_cli", "artifact_git", "script_git"])

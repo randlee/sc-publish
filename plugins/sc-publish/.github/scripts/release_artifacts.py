@@ -37,8 +37,10 @@ from release_manifest import (
     manifest_rust_toolchain,
     manifest_workspace_toml,
     package_name,
+    cmd_build_plan,
     cmd_package_check_plan,
     workspace_members,
+    workspace_source_archive,
     workspace_version,
     validate_prerelease,
     validate_publish_order,
@@ -449,23 +451,6 @@ def cmd_python_sdist_matrix(args: argparse.Namespace) -> int:
     return 0
 
 
-def cmd_build_plan(args: argparse.Namespace) -> int:
-    """Emit the manifest-derived flags that gate optional build legs."""
-    manifest = load_manifest(Path(args.manifest))
-    entries = _python_distribution_entries(manifest)
-    plan = {
-        "has_crates": bool(manifest["crates"]),
-        "has_release_binaries": bool(manifest["release_binaries"]),
-        "has_python_wheels": any(entry["wheels"] for entry in entries),
-        "has_python_sdists": any(entry["sdist"] for entry in entries),
-        "python_upload_tool": manifest_python_upload_tool(manifest),
-        "workspace_toml": manifest_workspace_toml(manifest),
-        "rust_toolchain": manifest_rust_toolchain(manifest),
-    }
-    print(json.dumps(plan, separators=(",", ":")))
-    return 0
-
-
 def cmd_release_asset_patterns(args: argparse.Namespace) -> int:
     """Print one required-asset regex per manifest release target."""
     manifest = load_manifest(Path(args.manifest))
@@ -473,6 +458,9 @@ def cmd_release_asset_patterns(args: argparse.Namespace) -> int:
     if manifest["release_binaries"]:
         for target in _release_targets_by_name(manifest).values():
             print(_release_asset_pattern(project, target))
+    source = workspace_source_archive(manifest)
+    if source is not None:
+        print(source["pattern"])
     for pattern in explicit_asset_patterns(manifest):
         print(pattern)
     for package in manifest.get("npm_packages", []):

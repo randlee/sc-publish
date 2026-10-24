@@ -1,6 +1,7 @@
 """Manifest and channel-contract parsing for the vendorable publish kit."""
 from __future__ import annotations
 
+import json
 import re
 import tomllib
 import urllib.parse
@@ -432,6 +433,58 @@ def _release_targets_by_name(manifest: dict) -> dict[str, dict]:
     if not targets:
         raise SystemExit("manifest must define [[release_targets]]")
     return targets
+
+
+def workspace_source_archive(manifest: dict) -> dict[str, str] | None:
+    """Plan the package-only workspace source archive from the linux row.
+
+    Binary releases keep one archive per release target. When
+    ``release_binaries`` is empty and an ubuntu ``tar.gz`` target exists, the
+    release still publishes ``{archive_prefix}-{version}-source.tar.gz`` from
+    that row. ``ubuntu-latest`` wins when several ubuntu rows are declared.
+    """
+    if manifest["release_binaries"]:
+        return None
+    selected: dict | None = None
+    for target in manifest["release_targets"]:
+        if target.get("archive") != "tar.gz" or not str(target.get("os", "")).startswith("ubuntu"):
+            continue
+        if selected is None or (
+            target.get("os") == "ubuntu-latest" and selected.get("os") != "ubuntu-latest"
+        ):
+            selected = target
+    if selected is None:
+        return None
+    prefix = manifest["project"].get("archive_prefix")
+    if not isinstance(prefix, str) or not prefix:
+        raise SystemExit("[project].archive_prefix must be a non-empty string")
+    return {
+        "os": selected["os"],
+        "target": selected["target"],
+        "name_template": f"{prefix}-{{version}}-source.tar.gz",
+        "pattern": rf"^{re.escape(prefix)}-.*-source\.tar\.gz$",
+    }
+
+
+def cmd_build_plan(args: object) -> int:
+    """Emit the manifest-derived flags that gate optional build legs."""
+    manifest = load_manifest(Path(args.manifest))
+    entries = _python_distribution_entries(manifest)
+    source = workspace_source_archive(manifest)
+    plan = {
+        "has_crates": bool(manifest["crates"]),
+        "has_release_binaries": bool(manifest["release_binaries"]),
+        "has_workspace_source_archive": source is not None,
+        "workspace_source_archive": "" if source is None else source["name_template"],
+        "workspace_source_runner": "ubuntu-latest" if source is None else source["os"],
+        "has_python_wheels": any(entry["wheels"] for entry in entries),
+        "has_python_sdists": any(entry["sdist"] for entry in entries),
+        "python_upload_tool": manifest_python_upload_tool(manifest),
+        "workspace_toml": manifest_workspace_toml(manifest),
+        "rust_toolchain": manifest_rust_toolchain(manifest),
+    }
+    print(json.dumps(plan, separators=(",", ":")))
+    return 0
 
 
 def _channel_config(manifest: dict, channel_name: str) -> dict:

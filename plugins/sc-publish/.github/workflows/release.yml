@@ -255,6 +255,36 @@ jobs:
           name: ${{ matrix.target }}
           path: ${{ env.ARCHIVE }}
 
+  build-workspace-source:
+    if: ${{ needs.release-plan.outputs.has_workspace_source_archive == 'true' }}
+    needs: [gate-and-tag, release-plan]
+    runs-on: ${{ needs.release-plan.outputs.workspace_source_runner }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ needs.gate-and-tag.outputs.build_ref }}
+
+      - name: Package workspace source archive
+        shell: bash
+        env:
+          RELEASE_VERSION: ${{ needs.gate-and-tag.outputs.release_version }}
+        run: |
+          set -euo pipefail
+          plan="$(python3 .github/scripts/release_artifacts.py build-plan --manifest "${RELEASE_ARTIFACT_MANIFEST}")"
+          template="$(jq -r '.workspace_source_archive' <<<"${plan}")"
+          [[ "$template" == *'{version}'* ]] || { echo "workspace source archive is not declared" >&2; exit 1; }
+          filename="${template//\{version\}/${RELEASE_VERSION}}"
+          prefix="${filename%.tar.gz}"
+          prefix="${prefix%-source}"
+          git archive --format=tar.gz --prefix="${prefix}/" -o "$filename" HEAD
+          echo "ARCHIVE=${filename}" >> "$GITHUB_ENV"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v6
+        with:
+          name: workspace-source
+          path: ${{ env.ARCHIVE }}
+
   publish:
     if: ${{ needs.gate-and-tag.outputs.release_target == 'production' && needs.release-plan.outputs.has_crates == 'true' }}
     needs: [gate-and-tag, release-plan]
@@ -334,6 +364,8 @@ jobs:
       python_sdist_matrix: ${{ steps.manifest.outputs.python_sdist_matrix }}
       has_crates: ${{ steps.manifest.outputs.has_crates }}
       has_release_binaries: ${{ steps.manifest.outputs.has_release_binaries }}
+      has_workspace_source_archive: ${{ steps.manifest.outputs.has_workspace_source_archive }}
+      workspace_source_runner: ${{ steps.manifest.outputs.workspace_source_runner }}
       has_python_wheels: ${{ steps.manifest.outputs.has_python_wheels }}
       has_python_sdists: ${{ steps.manifest.outputs.has_python_sdists }}
       python_upload_tool: ${{ steps.manifest.outputs.python_upload_tool }}
@@ -355,6 +387,8 @@ jobs:
           {
             echo "has_crates=$(jq -r '.has_crates' <<<"${plan}")"
             echo "has_release_binaries=$(jq -r '.has_release_binaries' <<<"${plan}")"
+            echo "has_workspace_source_archive=$(jq -r '.has_workspace_source_archive' <<<"${plan}")"
+            echo "workspace_source_runner=$(jq -r '.workspace_source_runner' <<<"${plan}")"
             echo "has_python_wheels=$(jq -r '.has_python_wheels' <<<"${plan}")"
             echo "has_python_sdists=$(jq -r '.has_python_sdists' <<<"${plan}")"
             echo "python_upload_tool=$(jq -r '.python_upload_tool' <<<"${plan}")"
@@ -541,8 +575,9 @@ jobs:
     if: >-
       ${{ !failure() && !cancelled() &&
           needs.gate-and-tag.outputs.release_target == 'production' &&
-          (needs.build.result == 'success' || needs.build.result == 'skipped') }}
-    needs: [gate-and-tag, build, build-python-wheels, build-python-sdists, build-npm]
+          (needs.build.result == 'success' || needs.build.result == 'skipped') &&
+          (needs.build-workspace-source.result == 'success' || needs.build-workspace-source.result == 'skipped') }}
+    needs: [gate-and-tag, build, build-workspace-source, build-python-wheels, build-python-sdists, build-npm]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5

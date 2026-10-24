@@ -216,7 +216,10 @@ output remains unchanged; shared workflows request the additional manifest
 column with `--include-manifest`.
 
 `release_binaries: []` is supported for package-only releases. The binary build
-and binary archive expectations are skipped; declared Python and npm build
+and binary archive expectations are skipped. When `release_targets` includes an
+ubuntu `tar.gz` row, the release workflow still builds and uploads one workspace
+source archive, `{archive_prefix}-{version}-source.tar.gz`, from that row
+(`ubuntu-latest` when several ubuntu rows exist). Declared Python and npm build
 failures still prevent release creation. Rust crate and Python distribution
 artifact IDs must remain distinct even when they share a source crate.
 

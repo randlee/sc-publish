@@ -64,10 +64,19 @@ def test_workflow_reuses_maturin_zig_and_declares_all_build_dependencies():
     assert declared["env"]["MACOSX_DEPLOYMENT_TARGET"] == "${{ matrix.deployment_target }}"
     assert 'maturin[zig]==1.9.4' in (root / "actions/setup-python-release-build/action.yml").read_text()
     assert "has_release_binaries" in release["jobs"]["build"]["if"]
+    source_archive = release["jobs"]["build-workspace-source"]
+    assert "has_workspace_source_archive" in source_archive["if"]
+    assert source_archive["runs-on"] == "${{ needs.release-plan.outputs.workspace_source_runner }}"
+    package_source = next(
+        step for step in source_archive["steps"] if step.get("name") == "Package workspace source archive"
+    )
+    assert "git archive" in package_source["run"]
+    assert "workspace_source_archive" in package_source["run"]
     github_release = release["jobs"]["release"]
-    assert {"build-python-wheels", "build-python-sdists", "build-npm"} <= set(github_release["needs"])
+    assert {"build-python-wheels", "build-python-sdists", "build-npm", "build-workspace-source"} <= set(github_release["needs"])
     assert "!failure()" in github_release["if"]
     assert "needs.build.result == 'skipped'" in github_release["if"]
+    assert "needs.build-workspace-source.result == 'skipped'" in github_release["if"]
 
 
 @pytest.mark.parametrize('workflow_name', ['release.yml', 'crates-publish.yml'])
