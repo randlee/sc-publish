@@ -7,6 +7,11 @@ Four steps take a repository from nothing to a published release:
 3. Add one block per destination, plus its secrets.
 4. Publish.
 
+Most destinations are one JSON block plus secrets. Two need more than the JSON:
+
+- crates.io also needs the Cargo layout below and a committed `Cargo.lock`.
+- PyPI also needs a static version in each `pyproject.toml`, and each binding crate listed as a workspace member.
+
 Field lists: [`publish-kit-requirements.md`](../.claude/skills/publishing/ref/publish-kit-requirements.md)
 and [`channel-contracts.md`](../.claude/skills/publishing/ref/channel-contracts.md).
 
@@ -20,7 +25,9 @@ Never edit a file that `install.py` writes. That covers every copied kit file (`
 
 ## Install
 
-Clone sc-publish at the pin SHA into a gitignored directory such as `.sc-publish-kit/`.
+Clone sc-publish at the pin SHA into `.sc-publish-kit/`. Add both `.sc-publish-kit/` and `.sc-publish-venv/` to `.gitignore`.
+
+`install.py` overwrites any file of yours at a kit path without warning, for example `.github/workflows/release.yml`, `docs/getting-started.md` or anything under `docs/sprints/`. Only `README.md` is installed under another name (`README.sc-publish.md`). Move conflicting files first.
 
 ```bash
 publish_python="$(python3 .sc-publish-kit/plugins/sc-publish/.github/scripts/bootstrap_sc_compose.py --venv .sc-publish-venv)"
@@ -30,10 +37,12 @@ publish_python="$(python3 .sc-publish-kit/plugins/sc-publish/.github/scripts/boo
   --dry-run --input release/sc-publish-consumer-input.json .
 ```
 
-Check the manifest against your workspace, then list the secrets and environments it needs:
+Check the manifest and the Cargo versions, then list the secrets and environments the manifest needs. `validate-manifest` alone does not check versions; Release Preflight runs `verify-version-lockstep` and fails on it.
 
 ```bash
 python3 .github/scripts/release_artifacts.py validate-manifest \
+  --manifest release/publish-artifacts.toml --workspace-toml Cargo.toml
+python3 .github/scripts/release_artifacts.py verify-version-lockstep \
   --manifest release/publish-artifacts.toml --workspace-toml Cargo.toml
 python3 .github/scripts/release_artifacts.py preflight-secret-plan \
   --manifest release/publish-artifacts.toml
@@ -41,12 +50,28 @@ python3 .github/scripts/release_artifacts.py preflight-secret-plan \
 
 Commit the installed files. Release workflows run the kit from the release tag, so install before you tag.
 
+## Cargo layout
+
+- `workspace_toml` names the root `Cargo.toml`. It needs a `[workspace]` table and `[workspace.package].version`. That is the release version. A single-crate `Cargo.toml` without `[workspace]` fails.
+- List every `cargo_toml` directory literally in `[workspace].members`. A glob such as `"crates/*"` fails `validate-manifest`.
+- Every `"publish": true` crate sets `version.workspace = true`. A literal version passes `validate-manifest` but fails `verify-version-lockstep`.
+- Commit `Cargo.lock`. Preflight runs `cargo package --locked` and releases run `cargo publish --locked`.
+
+```toml
+[workspace]
+members = ["crates/example"]
+
+[workspace.package]
+version = "0.1.0"
+```
+
 ## Minimum JSON
 
-This JSON publishes crates.io and the GitHub Release. `"channels": {}` adds nothing else.
+This JSON publishes crates.io and a GitHub Release carrying the `example` binary archive. `"channels": {}` adds nothing else.
 
 - `release_targets` must be non-empty.
-- `"release_binaries": []` builds no binary archives. Each binary name must be a Cargo `[[bin]]` name.
+- Each `release_binaries` name must be a Cargo `[[bin]]` name.
+- The GitHub Release needs at least one asset: a binary, a wheel or sdist, or an npm package. A crates-only manifest (`"release_binaries": []` with no Python or npm packages) fails at `release.yml` "Collect archives", because nothing was uploaded and `artifacts/` does not exist. This is a kit gap.
 - Crates publish in `publish_order`. A crate with `"publish": false` takes `"publish_order": 0`.
 
 ```json
@@ -74,7 +99,7 @@ This JSON publishes crates.io and the GitHub Release. `"channels": {}` adds noth
       "wait_after_publish_seconds": 0
     }
   ],
-  "release_binaries": [],
+  "release_binaries": [{"name": "example"}],
   "python_packages": [],
   "python_distributions": [],
   "npm_packages": [],
@@ -86,6 +111,7 @@ This JSON publishes crates.io and the GitHub Release. `"channels": {}` adds noth
 
 - Enable immutable releases: Settings → General → Releases. `release.yml` fails closed without it, and every downstream channel is denied. Enable it before the first release. A release created mutable cannot be fixed; publish a new version instead.
 - Create each GitHub environment a destination below names (Settings → Environments). Release Preflight fails when one is missing.
+- Use a `develop` and `main` branch model. `release-candidate.yml` tags `origin/develop` as `release-candidate-vX.Y.Z`. `release.yml` requires that tag to be an ancestor of `origin/main`, and builds and tags `vX.Y.Z` from `origin/main`. Merge the version bump to `main` before you publish. See [`release-state-strategy.md`](../.claude/skills/publishing/ref/release-state-strategy.md).
 
 ## Destinations
 
@@ -109,7 +135,7 @@ Each block merges into the minimum JSON. `project` and `channels` blocks add key
 
 One channel covers both. The `testpypi` release target uploads to TestPyPI as a rehearsal. Production PyPI publishes from `pypi-publish.yml` after the immutable Release exists.
 
-**JSON:** each distribution needs a `python_packages` entry with the same `package` name. Use `cargo_manifest` for maturin, or `"build_system": "setuptools"` instead. `wheels` lists GitHub runner labels. A wheels-only project keeps `"release_binaries": []`.
+**JSON:** each distribution needs a `python_packages` entry with the same `package` name. Use `cargo_manifest` for maturin, or `"build_system": "setuptools"` instead. `wheels` lists GitHub runner labels. A wheels-only project sets `"release_binaries": []`.
 
 ```json
 {
@@ -131,7 +157,7 @@ One channel covers both. The `testpypi` release target uploads to TestPyPI as a 
 }
 ```
 
-- **Templates:** none. `[project].name` in `pyproject.toml` must equal `package`.
+- **Templates:** none. Edit each `pyproject.toml`: `[project].name` must equal `package`, and `[project].version` must be a static `version = "X.Y.Z"` line equal to the workspace version. `dynamic = ["version"]` fails `sync-python-version` in the wheel build. List a maturin crate in `[workspace].members`.
 - **Setup:** create environments `pypi` and `testpypi`. Add environment secret `PYPI_API_TOKEN` to `pypi` and `TEST_PYPI_API_TOKEN` to `testpypi`. A new project needs an account-scoped token for its first upload.
 - **Confirm:** `curl -sf https://pypi.org/pypi/example-py/0.1.0/json` succeeds (`test.pypi.org` for the rehearsal); `pip install example-py==0.1.0`.
 
@@ -244,7 +270,7 @@ One channel covers both. The `testpypi` release target uploads to TestPyPI as a 
 ```
 
 - **Templates:** none. In `package.json`, `name` must equal the declared name, `version` must equal the release version, and the package must be public.
-- **Setup:** create environment `npm` and add environment secret `NPM_TOKEN`: an npm token with publish rights. Immutable releases are required.
+- **Setup:** the npm scope (user or organization) must already exist. Create environment `npm` and add environment secret `NPM_TOKEN`: an npm token allowed to publish new packages in that scope. The workflow publishes with `--access public`. Immutable releases are required.
 - **Confirm:** `npm view @example/client@0.1.0 version` prints `0.1.0`.
 
 ### GitHub prerelease (`/prerelease`)
@@ -273,7 +299,7 @@ A prerelease creates a GitHub prerelease only. It never touches crates.io, PyPI,
 }
 ```
 
-A wheels-only project keeps `"release_binaries": []`, sets `"binaries": []`, and installs its wheels instead:
+A wheels-only project sets `"release_binaries": []` and `"binaries": []`, and installs its wheels instead:
 
 ```json
 {
@@ -299,21 +325,29 @@ created and pushed prerelease/v0.1.1 from <commit>
 
 ## Publish
 
-Publish with `/cursor-publish` (`.cursor/agents/publisher.md`) or the ATM `publisher` teammate. It runs Release Preflight, then `release.yml` (the TestPyPI rehearsal, then production: crates.io and the immutable GitHub Release), then each declared channel workflow. Each leg retries by tag on its own.
+Publish with `/cursor-publish` (`.cursor/agents/publisher.md`) or the ATM `publisher` teammate. In order, it:
+
+1. cuts `release-candidate-vX.Y.Z` from `develop` with `release-candidate.yml`;
+2. merges the release, including the version bump, to `main`;
+3. runs Release Preflight on that `main` commit;
+4. runs `release.yml`: the TestPyPI rehearsal, then production (crates.io, the `vX.Y.Z` tag and the immutable GitHub Release);
+5. dispatches each declared channel workflow.
+
+Each leg retries by tag on its own. Branch rules: [`release-state-strategy.md`](../.claude/skills/publishing/ref/release-state-strategy.md).
 
 ## Checklist
 
-Every destination is a block in `release/sc-publish-consumer-input.json`. Re-run install and `--dry-run` after each change.
+Every destination is a block in `release/sc-publish-consumer-input.json`. Re-run install and `--dry-run` after each change. crates.io and PyPI also need the files in the last column.
 
-| Destination | JSON keys you add | Secrets | Environments | Other repositories |
+| Destination | JSON keys you add | Secrets | Environments | Other repositories or files |
 | --- | --- | --- | --- | --- |
-| crates.io | `crates` | `CARGO_REGISTRY_TOKEN` (repository) | `crates-io` | none |
+| crates.io | `crates` | `CARGO_REGISTRY_TOKEN` (repository) | `crates-io` | root `Cargo.toml` (members, `[workspace.package].version`), each crate `Cargo.toml` (`version.workspace = true`), committed `Cargo.lock` |
 | GitHub Release | none | none (`GITHUB_TOKEN`) | none | none |
-| PyPI and TestPyPI | `python_packages`, `python_distributions`, `channels.pypi` | `PYPI_API_TOKEN`, `TEST_PYPI_API_TOKEN` (environment) | `pypi`, `testpypi` | none |
+| PyPI and TestPyPI | `python_packages`, `python_distributions`, `channels.pypi` | `PYPI_API_TOKEN`, `TEST_PYPI_API_TOKEN` (environment) | `pypi`, `testpypi` | each `pyproject.toml` (static `version`); binding crate in `[workspace].members` |
 | Homebrew | `release_targets`, `release_binaries`, `project.renderer_archive_path`, `channels.homebrew` | `HOMEBREW_TAP_TOKEN` (repository) | none | tap |
 | Scoop | `release_targets`, `release_binaries`, `project.renderer_archive_path`, `channels.scoop` | `SCOOP_BUCKET_TOKEN` (repository) | none | bucket |
 | WinGet | `release_targets`, `release_binaries`, `channels.winget` | `WINGET_GITHUB_TOKEN` (repository) | none | `winget-pkgs` fork; first version merged by hand |
-| npm | `npm_packages`, `channels.npm` | `NPM_TOKEN` (environment) | `npm` | none |
+| npm | `npm_packages`, `channels.npm` | `NPM_TOKEN` (environment) | `npm` | existing npm scope; `package.json` and `package-lock.json` |
 | `/prerelease` | `prerelease`, plus `scripts/prerelease_tag.py` | none | none | none |
 
-Every destination except `/prerelease` needs immutable releases enabled. Edit a template only as a copy at a new path.
+Every destination except `/prerelease` needs immutable releases enabled and the `develop`/`main` release-candidate flow. Edit a template only as a copy at a new path.
