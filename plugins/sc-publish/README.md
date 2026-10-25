@@ -147,6 +147,7 @@ Each publish channel — `github_release`, `crates_io`, `pypi`, `npm`, `homebrew
 
 ## Where to look next
 
+- [`docs/getting-started.md`](docs/getting-started.md) — pin, one JSON manifest, optional tag script, then `install.py`.
 - `.claude/skills/publishing/ref/publish-kit-requirements.md` — normative
   requirements for the kit.
 - `.claude/skills/publishing/ref/channel-contracts.md` — per-channel worker
