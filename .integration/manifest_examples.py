@@ -182,6 +182,34 @@ def verify_complete_contract() -> None:
     assert set(rendered_subset["channels"]) == {"pypi"}
     assert rendered_subset == subset
 
+    # A wheels-only consumer (no release binaries) can opt into prereleases:
+    # [prerelease].binaries may be empty, and the manifest round-trips.
+    wheels_only = complete_values()
+    wheels_only["release_binaries"] = []
+    wheels_only["channels"] = {"pypi": wheels_only["channels"]["pypi"]}
+    del wheels_only["project"]["renderer_archive_path"]
+    wheels_only["prerelease"] = {
+        "tag_prefix": "prerelease/v",
+        "tag_script": "scripts/prerelease_tag.py",
+        "install_root": "~/.example-builds",
+        "binaries": [],
+        "protected_branches": ["develop", "main"],
+        "selector_dir": {
+            "darwin": "~/.example-builds/selectors/darwin",
+            "linux": "~/.example-builds/selectors/linux",
+            "windows": "%LOCALAPPDATA%\\Example\\prerelease-selectors",
+        },
+        "post_install": "{python} -m pip install --force-reinstall {wheels}",
+        "verify": "{python} -m pip show example",
+    }
+    rendered_wheels_only = render(wheels_only)
+    # An empty [[release_binaries]] array renders as no table at all.
+    assert "release_binaries" not in rendered_wheels_only
+    assert rendered_wheels_only["prerelease"]["binaries"] == []
+    assert rendered_wheels_only == {
+        key: value for key, value in wheels_only.items() if key != "release_binaries"
+    }
+
     with tempfile.TemporaryDirectory() as directory:
         temporary = Path(directory)
         consumer = temporary / "consumer"

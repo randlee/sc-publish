@@ -396,15 +396,36 @@ def validate_prerelease(manifest: dict) -> None:
     string_fields = ("tag_prefix", "tag_script", "install_root", "post_install", "verify")
     _require_keys(
         prerelease,
-        (*string_fields, "binaries", "protected_branches", "selector_dir"),
+        (*string_fields, "protected_branches", "selector_dir"),
         "[prerelease]",
     )
     if not all(isinstance(prerelease[key], str) and prerelease[key] for key in string_fields):
         raise SystemExit("[prerelease] string fields must be non-empty")
-    for key in ("binaries", "protected_branches"):
-        values = prerelease[key]
-        if not isinstance(values, list) or not values or not all(isinstance(name, str) and name for name in values):
-            raise SystemExit(f"[prerelease].{key} must be a non-empty string list")
+    protected = prerelease["protected_branches"]
+    if not isinstance(protected, list) or not protected or not all(isinstance(name, str) and name for name in protected):
+        raise SystemExit("[prerelease].protected_branches must be a non-empty string list")
+    # binaries is optional: a consumer without release binaries installs only
+    # its Python wheels from the prerelease.
+    binaries = prerelease.get("binaries", [])
+    if not isinstance(binaries, list) or not all(isinstance(name, str) and name for name in binaries):
+        raise SystemExit("[prerelease].binaries must be a string list")
+    declared = {
+        entry.get("name")
+        for entry in manifest.get("release_binaries", [])
+        if isinstance(entry, dict)
+    }
+    undeclared = sorted(set(binaries) - declared)
+    if undeclared:
+        raise SystemExit(
+            "[prerelease].binaries references undeclared release binary(s): " + ", ".join(undeclared)
+        )
+    if not binaries and not any(
+        isinstance(entry, dict) and entry.get("wheels")
+        for entry in manifest.get("python_distributions", [])
+    ):
+        raise SystemExit(
+            "[prerelease] installs nothing: declare [prerelease].binaries or python_distributions wheels"
+        )
     selector_dir = prerelease["selector_dir"]
     if (
         not isinstance(selector_dir, dict)
