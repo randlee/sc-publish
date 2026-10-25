@@ -609,7 +609,9 @@ jobs:
       - name: Collect archives
         if: ${{ steps.published_release_probe.outputs.release_state != 'complete' || inputs.replace_release_assets == true }}
         run: |
-          mkdir -p release
+          # download-artifact creates artifacts/ only when at least one
+          # artifact exists; a crates-only manifest uploads none.
+          mkdir -p artifacts release
           find artifacts -type f \( -name '*.tar.gz' -o -name '*.zip' -o -name '*.tgz' \) -exec mv {} release/ \;
           find artifacts -type f -name '*.whl' -exec mv {} release/ \;
           ls -la release/
@@ -629,7 +631,15 @@ jobs:
               files+=("$file")
             done
           done
-          sha256sum "${files[@]}" > checksums.txt
+          # checksums.txt is always a required asset (the published-release
+          # probe expects it), so an asset-free release still gets one. It
+          # carries a comment line rather than zero bytes so the upload is
+          # never an empty asset.
+          if ((${#files[@]} == 0)); then
+            echo "# no release assets" > checksums.txt
+          else
+            sha256sum "${files[@]}" > checksums.txt
+          fi
 
       - name: Create GitHub Release
         if: ${{ steps.published_release_probe.outputs.release_state != 'complete' || inputs.replace_release_assets == true }}
