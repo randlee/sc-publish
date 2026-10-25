@@ -216,7 +216,13 @@ def load_install_values(path: Path) -> dict[str, object]:
         prerelease = _require_mapping(values["prerelease"], "prerelease")
         for field in ("tag_prefix", "tag_script", "install_root", "post_install", "verify"):
             _require_string(prerelease.get(field), f"prerelease.{field}")
-        _require_string_array(prerelease.get("binaries"), "prerelease.binaries")
+        # Optional: a wheels-only consumer declares [] or omits binaries.
+        prerelease_binaries = _require_string_array(prerelease.get("binaries", []), "prerelease.binaries")
+        undeclared = sorted(set(prerelease_binaries) - {binary["name"] for binary in release_binaries})
+        if undeclared:
+            raise argparse.ArgumentTypeError(
+                "prerelease.binaries references undeclared release binary(s): " + ", ".join(undeclared)
+            )
         _require_string_array(
             prerelease.get("protected_branches"), "prerelease.protected_branches"
         )
@@ -257,6 +263,13 @@ def load_install_values(path: Path) -> dict[str, object]:
                 raise argparse.ArgumentTypeError(
                     f"python_distributions[{position}].build_system must be setuptools"
                 )
+
+    if "prerelease" in values and not values["prerelease"].get("binaries") and not any(
+        distribution.get("wheels") for distribution in distributions
+    ):
+        raise argparse.ArgumentTypeError(
+            "prerelease installs nothing: declare prerelease.binaries or python_distributions wheels"
+        )
 
     npm_packages = _require_entries(values.get("npm_packages", []), "npm_packages", ("name", "source"))
     names = [entry["name"] for entry in npm_packages]
@@ -477,7 +490,7 @@ def template_values(values: dict[str, object]) -> dict[str, object]:
     prerelease = values.get("prerelease")
     template_prerelease = (
         _toml_scalars(
-            _require_mapping(prerelease, "prerelease"),
+            {"binaries": [], **_require_mapping(prerelease, "prerelease")},
             ("binaries", "protected_branches", "selector_dir"),
         )
         if prerelease

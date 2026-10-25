@@ -1411,8 +1411,13 @@ verify = "fixture --version"
 """
 
 
-def run_validate_manifest_with_prerelease(tmp_path: Path, table: str) -> subprocess.CompletedProcess[str]:
-    workspace, manifest = write_repo_fixture(tmp_path, manifest_wheels=["ubuntu-latest"])
+def run_validate_manifest_with_prerelease(
+    tmp_path: Path, table: str, *, manifest_wheels: list[str] | None = None
+) -> subprocess.CompletedProcess[str]:
+    tmp_path.mkdir(parents=True, exist_ok=True)
+    workspace, manifest = write_repo_fixture(
+        tmp_path, manifest_wheels=["ubuntu-latest"] if manifest_wheels is None else manifest_wheels
+    )
     manifest.write_text(manifest.read_text(encoding="utf-8") + table, encoding="utf-8")
     return subprocess.run(
         [
@@ -1451,6 +1456,38 @@ def test_validate_manifest_rejects_prerelease_table_missing_a_key(tmp_path: Path
     result = run_validate_manifest_with_prerelease(tmp_path, table)
     assert result.returncode != 0
     assert "[prerelease] missing required keys: verify" in result.stderr
+
+
+def test_validate_manifest_accepts_a_wheels_only_prerelease(tmp_path: Path) -> None:
+    empty = run_validate_manifest_with_prerelease(
+        tmp_path / "empty", PRERELEASE_TABLE.replace('binaries = ["fixture"]', "binaries = []", 1)
+    )
+    assert empty.returncode == 0, empty.stderr
+    omitted = run_validate_manifest_with_prerelease(
+        tmp_path / "omitted", PRERELEASE_TABLE.replace('binaries = ["fixture"]\n', "", 1)
+    )
+    assert omitted.returncode == 0, omitted.stderr
+    assert "manifest validation passed" in omitted.stdout
+
+
+def test_validate_manifest_rejects_a_prerelease_that_installs_nothing(tmp_path: Path) -> None:
+    result = run_validate_manifest_with_prerelease(
+        tmp_path, PRERELEASE_TABLE.replace('binaries = ["fixture"]', "binaries = []", 1), manifest_wheels=[]
+    )
+    assert result.returncode != 0
+    assert "[prerelease] installs nothing" in result.stderr
+
+
+def test_validate_manifest_rejects_an_undeclared_prerelease_binary(tmp_path: Path) -> None:
+    accepted = run_validate_manifest_with_prerelease(
+        tmp_path / "declared", PRERELEASE_TABLE.replace('binaries = ["fixture"]', 'binaries = ["fixture", "fixture-daemon"]', 1)
+    )
+    assert accepted.returncode == 0, accepted.stderr
+    result = run_validate_manifest_with_prerelease(
+        tmp_path / "undeclared", PRERELEASE_TABLE.replace('binaries = ["fixture"]', 'binaries = ["fixture", "ghost"]', 1)
+    )
+    assert result.returncode != 0
+    assert "[prerelease].binaries references undeclared release binary(s): ghost" in result.stderr
 
 
 def test_validate_manifest_rejects_unknown_channel_target(tmp_path: Path) -> None:
