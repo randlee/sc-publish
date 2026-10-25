@@ -210,6 +210,20 @@ def verify_complete_contract() -> None:
         key: value for key, value in wheels_only.items() if key != "release_binaries"
     }
 
+    # A crates-only consumer (crates.io plus the GitHub Release; no binaries,
+    # Python or npm packages, and no post-release channels) round-trips too.
+    crates_only = complete_values()
+    crates_only["release_binaries"] = []
+    crates_only["python_packages"] = []
+    crates_only["python_distributions"] = []
+    crates_only["channels"] = {}
+    del crates_only["project"]["renderer_archive_path"]
+    # Empty arrays and an empty channels table render as no table at all.
+    absent = {"release_binaries", "python_packages", "python_distributions", "channels"}
+    assert render(crates_only) == {
+        key: value for key, value in crates_only.items() if key not in absent
+    }
+
     with tempfile.TemporaryDirectory() as directory:
         temporary = Path(directory)
         consumer = temporary / "consumer"
