@@ -102,14 +102,26 @@ Consumers may opt in by declaring `[prerelease]` in
 `release/publish-artifacts.toml`. The installed `prerelease` skill is
 registered under both `.claude/skills/` and `.codex/skills/`, with `--list`,
 `--install`, and `--publish` modes (`--create` remains a compatibility alias).
-Publishing creates only GitHub prerelease archive pairs: it tags an explicitly
+Publishing creates only a GitHub prerelease carrying the same
+manifest-declared assets a real release builds: binary archives (when
+`release_binaries` is non-empty), every declared Python wheel for every
+platform, each declared sdist, and `checksums.txt`. It tags an explicitly
 authorized, clean non-protected branch,
 waits for `prerelease-archive.yml`, verifies every Release asset and checksum,
 and prints the Release URL. It never publishes to the normal package or
 channel registries. Install resolves a selected or latest matching
-prerelease, checksum-verifies the host archive, stages it under the manifest
-install root, updates the platform selector, and invokes the declared
-post-install and verification commands. Dry runs do not make network calls.
+prerelease, checksum-verifies the host archive and one deterministically
+selected host wheel per distribution, stages them atomically under the
+manifest install root, updates the platform selector, and invokes the declared
+post-install and verification commands (placeholders `{version}`,
+`{stage_dir}`, `{python}`, `{selector_dir}`, `{wheels}`). Install also works on
+a headless host without `gh` for a public repository whose `[project].homepage`
+is its GitHub URL. Dry runs do not make network calls.
+
+`[prerelease].binaries` may be empty or omitted for a consumer with no release
+binaries; such a consumer must declare `python_distributions`, and its
+prerelease contains only the wheels, sdists, and `checksums.txt`. Every name
+in a non-empty `binaries` list must be a declared release binary.
 
 ## The channel model
 
