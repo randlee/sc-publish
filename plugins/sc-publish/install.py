@@ -11,7 +11,7 @@ import shutil
 import sys
 import tempfile
 import tomllib
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -547,17 +547,40 @@ def template_values(values: dict[str, object]) -> dict[str, object]:
 
 
 def package_files() -> list[Path]:
-    """Return package files that are copied unchanged into a consumer."""
+    """Return consumer assets, excluding source-only sprint history."""
     generated_outputs = {PACKAGE_ROOT / output for output in TEMPLATES.values()}
-    return sorted(
-        path
-        for path in PACKAGE_ROOT.rglob("*")
-        if path.is_file()
-        and path.name != SOURCE_ROOT_MARKER
-        and path not in generated_outputs
-        and "__pycache__" not in path.parts
-        and path.suffix != ".pyc"
-    )
+    files = []
+    for path in PACKAGE_ROOT.rglob("*"):
+        relative = path.relative_to(PACKAGE_ROOT)
+        if relative.parts[:2] == ("docs", "sprints"):
+            continue
+        if "__pycache__" in relative.parts or path.suffix == ".pyc":
+            continue
+        if path.is_symlink():
+            raise ValueError(f"package contains symlink: {relative}")
+        if path.is_file() and path.name != SOURCE_ROOT_MARKER and path not in generated_outputs:
+            files.append(path)
+    return sorted(files)
+
+
+def install_inventory(consumer: Path) -> list[tuple[Path, Path]]:
+    """Build and validate all copied and rendered destinations before writing."""
+    copies = [(source, RENAMED_FILES.get(source.relative_to(PACKAGE_ROOT),
+                                         source.relative_to(PACKAGE_ROOT)))
+              for source in package_files()]
+    destinations = [relative for _, relative in copies] + list(TEMPLATES.values())
+    if len(destinations) != len(set(destinations)):
+        raise ValueError("duplicate installer destination")
+    for relative in destinations:
+        if (relative.is_absolute() or not relative.parts or ".." in relative.parts
+                or "\\" in str(relative) or PureWindowsPath(str(relative)).drive):
+            raise ValueError(f"unsafe installer destination: {relative}")
+        current = consumer
+        for component in relative.parts:
+            current = current / component
+            if current.is_symlink():
+                raise ValueError(f"symlink in installer destination: {relative}")
+    return copies
 
 
 def print_diff(destination: Path, source: Path, relative: Path) -> None:
@@ -642,6 +665,11 @@ Exit 0 means clean/success; a dry-run returns 1 when consumer files would change
     except argparse.ArgumentTypeError as error:
         parser.error(str(error))
 
+    try:
+        copies = install_inventory(consumer)
+    except ValueError as error:
+        parser.error(str(error))
+
     with tempfile.TemporaryDirectory() as temporary_directory:
         rendered_templates = {
             template: Path(temporary_directory) / output.name
@@ -654,10 +682,7 @@ Exit 0 means clean/success; a dry-run returns 1 when consumer files would change
             parser.error(str(error))
 
         changed = False
-        for source in package_files():
-            relative = RENAMED_FILES.get(
-                source.relative_to(PACKAGE_ROOT), source.relative_to(PACKAGE_ROOT)
-            )
+        for source, relative in copies:
             destination = consumer / relative
             if destination.exists() and destination.read_bytes() == source.read_bytes():
                 continue
