@@ -1644,23 +1644,61 @@ def test_verify_python_release_assets_accepts_manifest_declared_wheels_and_sdist
     assert "'sc-compose': {'wheel': 2, 'sdist': 1}" in result.stdout
 
 
-def test_release_manifest_publishes_sc_sha_before_its_consumers() -> None:
-    """Keep manifest-declared crate ordering and fields regression-tested."""
-    manifest = require_manifest_crates()
+def assert_manifest_crates_and_channels(manifest: dict) -> None:
+    """Check ordered crate declarations and every configured channel."""
     crates = [entry for entry in manifest["crates"] if entry.get("publish", True)]
     orders = [entry["publish_order"] for entry in crates]
     assert orders == sorted(orders)
     assert len(orders) == len(set(orders))
     names = [entry["package"] for entry in crates]
-    if {"sc-sha", "sc-composer", "sc-compose"}.issubset(names):
-        positions = {name: names.index(name) for name in names}
-        assert positions["sc-sha"] < positions["sc-composer"] < positions["sc-compose"]
+    positions = {name: names.index(name) for name in names}
+    if "sc-sha" in positions:
+        for consumer in ("sc-composer", "sc-compose"):
+            if consumer in positions:
+                assert positions["sc-sha"] < positions[consumer]
+    if "sc-composer" in positions and "sc-compose" in positions:
+        assert positions["sc-composer"] < positions["sc-compose"]
     for entry in crates:
         assert entry["artifact"]
         assert entry["package"]
         assert entry["cargo_toml"].endswith("Cargo.toml")
         assert entry["wait_after_publish_seconds"] >= 0
-    assert manifest["channels"]
+    channels = manifest.get("channels", {})
+    assert isinstance(channels, dict)
+    for channel in channels.values():
+        assert isinstance(channel, dict)
+        assert isinstance(channel.get("workflow"), str) and channel["workflow"]
+        assert isinstance(channel.get("dispatch_inputs"), dict)
+
+
+def test_release_manifest_publishes_sc_sha_before_its_consumers() -> None:
+    """Check crate order and configured channels in the installed consumer."""
+    assert_manifest_crates_and_channels(require_manifest_crates())
+
+
+@pytest.mark.parametrize("channels", [None, {}, {"pypi": {"workflow": "publish.yml", "dispatch_inputs": {}}}])
+def test_manifest_crate_checks_accept_optional_and_configured_channels(channels: dict | None) -> None:
+    crates = [
+        {"artifact": name, "package": name, "cargo_toml": f"{name}/Cargo.toml",
+         "publish_order": order, "wait_after_publish_seconds": 0}
+        for order, name in enumerate(("sc-sha", "sc-composer", "sc-compose"), 1)
+    ]
+    manifest = {"crates": crates}
+    if channels is not None:
+        manifest["channels"] = channels
+    assert_manifest_crates_and_channels(manifest)
+    crates[1]["publish_order"] = 1
+    with pytest.raises(AssertionError):
+        assert_manifest_crates_and_channels(manifest)
+    crates[1]["publish_order"] = 2
+    crates[0]["package"], crates[1]["package"] = crates[1]["package"], crates[0]["package"]
+    with pytest.raises(AssertionError):
+        assert_manifest_crates_and_channels(manifest)
+
+
+def test_manifest_crate_checks_reject_invalid_configured_channel() -> None:
+    with pytest.raises(AssertionError):
+        assert_manifest_crates_and_channels({"crates": [], "channels": {"pypi": {}}})
 
 
 def run_manifest_command(*args: str) -> subprocess.CompletedProcess[str]:
