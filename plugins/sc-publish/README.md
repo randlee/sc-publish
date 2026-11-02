@@ -241,7 +241,7 @@ formatting, clippy, workspace tests or sc-lint; those gate every merge in the
 consumer's own CI, with the consumer's own tool bootstrap, before a release
 commit exists. The `setup-lint-toolchain` and `setup-sc-lint` actions remain
 available for consumer CI workflows; `setup-sc-lint` retains its released
-`0.4.0` default.
+`0.8.4` default.
 Consumers can opt into a reviewed source commit through
 `project.sc_lint_source_revision` in `install.json` (rendered into
 `release/publish-artifacts.toml`), or the action's `source-revision` input.

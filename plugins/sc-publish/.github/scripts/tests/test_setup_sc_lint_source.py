@@ -109,6 +109,13 @@ class SourceSetupTests(unittest.TestCase):
                 self.assertEqual(result.returncode, 0, result.stderr)
                 self.assertEqual((root/'env').read_text().strip(), 'SC_LINT_SOURCE_REVISION=')
 
+    def test_action_default_meets_sc_lint_0_8_4_floor(self):
+        action = SCRIPT.parents[1] / 'actions/setup-sc-lint/action.yml'
+        manifest = yaml.safe_load(action.read_text())
+        version = manifest['inputs']['version']['default']
+        self.assertRegex(version, r'^\d+\.\d+\.\d+$')
+        self.assertGreaterEqual(tuple(int(part) for part in version.split('.')), (0, 8, 4))
+
     def test_real_subprocess_timeout_fails_with_command_context(self):
         with tempfile.TemporaryDirectory() as directory:
             with self.assertRaisesRegex(RuntimeError, 'timed out.*sleep') as caught:
