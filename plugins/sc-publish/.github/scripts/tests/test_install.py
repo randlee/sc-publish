@@ -470,6 +470,40 @@ class InstallValuesTests(unittest.TestCase):
         check_ids = [check["id"] for check in manifest["checks"]]
         self.assertEqual(check_ids, ["docli-cli-html", "example-gate"])
 
+    def test_package_inventory_excludes_sprint_history_and_keeps_assets(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            for name in ("docs/sprints/nested/history.md", "docs/guide.md", "README.md"):
+                path = root / name
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text(name, encoding="utf-8")
+            with patch.object(INSTALL, "PACKAGE_ROOT", root):
+                destinations = [dest for _, dest in INSTALL.install_inventory(root / "consumer")]
+            self.assertIn(Path("docs/guide.md"), destinations)
+            self.assertIn(Path("README.sc-publish.md"), destinations)
+            self.assertNotIn(Path("docs/sprints/nested/history.md"), destinations)
+
+    def test_inventory_rejects_unsafe_and_symlink_destinations(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            package, consumer = root / "package", root / "consumer"
+            package.mkdir()
+            consumer.mkdir()
+            (package / "asset").write_text("asset", encoding="utf-8")
+            with patch.object(INSTALL, "PACKAGE_ROOT", package):
+                with patch.object(INSTALL, "RENAMED_FILES", {Path("asset"): Path("../escape")}):
+                    with self.assertRaisesRegex(ValueError, "unsafe installer destination"):
+                        INSTALL.install_inventory(consumer)
+                with patch.object(INSTALL, "RENAMED_FILES", {Path("asset"): Path("C:\\escape")}):
+                    with self.assertRaisesRegex(ValueError, "unsafe installer destination"):
+                        INSTALL.install_inventory(consumer)
+                (consumer / "asset").symlink_to(root / "outside")
+                with self.assertRaisesRegex(ValueError, "symlink in installer destination"):
+                    INSTALL.install_inventory(consumer)
+                (package / "linked").symlink_to(package / "asset")
+                with self.assertRaisesRegex(ValueError, "package contains symlink"):
+                    INSTALL.install_inventory(consumer)
+
     def test_install_places_executable_release_helpers_at_every_workflow_path(self) -> None:
         """The byte-exact overlay keeps helpers under .github/scripts/.
 

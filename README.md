@@ -21,6 +21,9 @@ help. The installer deliberately has no source-discovery mode: release targets,
 Python packaging details, and external publish channels are reviewed policy,
 not values that can be inferred safely from a repository checkout.
 
+Consumer setup is the pin file, one JSON manifest, and optional scripts.
+See [plugins/sc-publish/docs/getting-started.md](plugins/sc-publish/docs/getting-started.md).
+
 The installer copies the shared `.claude`, `.github`, and release assets, then
 uses the pinned `sc-compose` Python bindings to write consumer-specific release manifests.
 The non-CI examples in [`.integration/manifest_examples.py`](.integration/manifest_examples.py)
