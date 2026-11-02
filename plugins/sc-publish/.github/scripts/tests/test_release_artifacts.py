@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import hashlib
 import io
 import json
 import os
+import re
 import subprocess
 import sys
 import tarfile
@@ -990,7 +992,7 @@ def test_github_release_leg_is_detect_and_skip(tmp_path: Path) -> None:
         text.count(
             "if: ${{ steps.published_release_probe.outputs.release_state != 'complete' || inputs.replace_release_assets == true }}"
         )
-        == 5
+        == 6
     )
     assert (
         "if: ${{ steps.published_release_probe.outputs.release_state == 'complete' && inputs.replace_release_assets != true }}"
@@ -1644,23 +1646,61 @@ def test_verify_python_release_assets_accepts_manifest_declared_wheels_and_sdist
     assert "'sc-compose': {'wheel': 2, 'sdist': 1}" in result.stdout
 
 
-def test_release_manifest_publishes_sc_sha_before_its_consumers() -> None:
-    """Keep manifest-declared crate ordering and fields regression-tested."""
-    manifest = require_manifest_crates()
+def assert_manifest_crates_and_channels(manifest: dict) -> None:
+    """Check ordered crate declarations and every configured channel."""
     crates = [entry for entry in manifest["crates"] if entry.get("publish", True)]
     orders = [entry["publish_order"] for entry in crates]
     assert orders == sorted(orders)
     assert len(orders) == len(set(orders))
     names = [entry["package"] for entry in crates]
-    if {"sc-sha", "sc-composer", "sc-compose"}.issubset(names):
-        positions = {name: names.index(name) for name in names}
-        assert positions["sc-sha"] < positions["sc-composer"] < positions["sc-compose"]
+    positions = {name: names.index(name) for name in names}
+    if "sc-sha" in positions:
+        for consumer in ("sc-composer", "sc-compose"):
+            if consumer in positions:
+                assert positions["sc-sha"] < positions[consumer]
+    if "sc-composer" in positions and "sc-compose" in positions:
+        assert positions["sc-composer"] < positions["sc-compose"]
     for entry in crates:
         assert entry["artifact"]
         assert entry["package"]
         assert entry["cargo_toml"].endswith("Cargo.toml")
         assert entry["wait_after_publish_seconds"] >= 0
-    assert manifest["channels"]
+    channels = manifest.get("channels", {})
+    assert isinstance(channels, dict)
+    for channel in channels.values():
+        assert isinstance(channel, dict)
+        assert isinstance(channel.get("workflow"), str) and channel["workflow"]
+        assert isinstance(channel.get("dispatch_inputs"), dict)
+
+
+def test_release_manifest_publishes_sc_sha_before_its_consumers() -> None:
+    """Check crate order and configured channels in the installed consumer."""
+    assert_manifest_crates_and_channels(require_manifest_crates())
+
+
+@pytest.mark.parametrize("channels", [None, {}, {"pypi": {"workflow": "publish.yml", "dispatch_inputs": {}}}])
+def test_manifest_crate_checks_accept_optional_and_configured_channels(channels: dict | None) -> None:
+    crates = [
+        {"artifact": name, "package": name, "cargo_toml": f"{name}/Cargo.toml",
+         "publish_order": order, "wait_after_publish_seconds": 0}
+        for order, name in enumerate(("sc-sha", "sc-composer", "sc-compose"), 1)
+    ]
+    manifest = {"crates": crates}
+    if channels is not None:
+        manifest["channels"] = channels
+    assert_manifest_crates_and_channels(manifest)
+    crates[1]["publish_order"] = 1
+    with pytest.raises(AssertionError):
+        assert_manifest_crates_and_channels(manifest)
+    crates[1]["publish_order"] = 2
+    crates[0]["package"], crates[1]["package"] = crates[1]["package"], crates[0]["package"]
+    with pytest.raises(AssertionError):
+        assert_manifest_crates_and_channels(manifest)
+
+
+def test_manifest_crate_checks_reject_invalid_configured_channel() -> None:
+    with pytest.raises(AssertionError):
+        assert_manifest_crates_and_channels({"crates": [], "channels": {"pypi": {}}})
 
 
 def run_manifest_command(*args: str) -> subprocess.CompletedProcess[str]:
@@ -2253,7 +2293,7 @@ def test_release_workflow_enforces_python_release_invariants() -> None:
     assert "TEST_PYPI_API_TOKEN" in text
     assert "secrets.TEST_PYPI_TOKEN" not in text
     assert "--repository testpypi" in text
-    assert "for pattern in *.tar.gz *.zip *.whl *.tgz; do" in text
+    assert "files=(*.tar.gz *.zip *.whl *.tgz)" in text
     assert "uses: ./.github/actions/setup-python-release-build" in text
     assert "update-homebrew:" not in text
     assert "publish-winget:" not in text
@@ -3096,13 +3136,12 @@ def test_release_preflight_collects_independent_failures_before_denial() -> None
 
 def test_release_workflow_collects_wheels_without_redundant_zip_sweep() -> None:
     text = release_workflow_text()
+    collection = text.split("      - name: Collect archives\n", 1)[1].split("\n      - name:", 1)[0]
 
-    assert (
-        "find artifacts -type f \\( -name '*.tar.gz' -o -name '*.zip' -o -name '*.tgz' \\) -exec mv {} release/ \\;"
-        in text
-    )
-    assert "find artifacts -type f -name '*.whl' -exec mv {} release/ \\;" in text
-    assert "find artifacts -type f \\( -name '*.zip' -o -name '*.whl' \\)" not in text
+    assert collection.count('find "$RELEASE_DOWNLOAD_DIR" -type f') == 1
+    for extension in ("tar.gz", "zip", "tgz", "whl"):
+        assert f"-name '*.{extension}'" in collection
+    assert '-exec mv -f {} "$RELEASE_ASSET_DIR/"' in collection
 
 
 def test_release_workflow_rehearsal_mode_avoids_production_side_effects() -> None:
@@ -3721,3 +3760,123 @@ def test_fixture_command_timeout_terminates_stalled_child(tmp_path, monkeypatch,
     assert "time.sleep(60)" in str(caught.value)
     assert len(children) == 1
     assert children[0].poll() is not None, "timed-out child must be killed and reaped"
+
+
+# Execute release staging and retry selection without publishing any channel.
+WORKFLOW = Path(__file__).resolve().parents[2] / "workflows" / "release.yml"
+
+
+def step_script(name: str) -> str:
+    text = WORKFLOW.read_text(encoding="utf-8")
+    step = text.split(f"      - name: {name}\n", 1)[1].split("\n      - ", 1)[0]
+    script = step.split("        run: |\n", 1)[1]
+    return "\n".join(line.removeprefix("          ") for line in script.splitlines())
+
+
+def run_step(name: str, cwd: Path, env: dict[str, str]) -> None:
+    result = subprocess.run(
+        ["bash", "-c", step_script(name)],
+        cwd=cwd,
+        env={**os.environ, **env},
+        # Nonempty stdin exposes the no-argument sha256sum bug deterministically.
+        input="must never become an asset checksum\n",
+        capture_output=True,
+        text=True,
+        timeout=10,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
+
+
+@pytest.mark.parametrize("with_archives", [False, True])
+def test_asset_collection_isolated_from_tracked_release_files(tmp_path, with_archives):
+    repo = tmp_path / "repo"
+    config = repo / "release"
+    config.mkdir(parents=True)
+    (config / "publish-artifacts.toml").write_text("tracked configuration\n")
+    (config / "do-not-upload.zip").write_bytes(b"tracked example archive")
+    downloads = tmp_path / "runner-temp" / "release-artifacts"
+    stage = tmp_path / "runner-temp" / "release-assets"
+    archives = {
+        "sdk.tar.gz": b"tar archive",
+        "sdk.zip": b"zip archive",
+        "sdk.whl": b"wheel archive",
+        "sdk with spaces.tgz": b"npm archive",
+    } if with_archives else {}
+    if with_archives:
+        artifact = downloads / "artifact-one"
+        artifact.mkdir(parents=True)
+        for filename, content in archives.items():
+            (artifact / filename).write_bytes(content)
+        (artifact / "build-log.txt").write_text("not a release asset\n")
+    else:
+        assert not downloads.exists(), "model download-artifact with no matching uploads"
+    env = {"RELEASE_DOWNLOAD_DIR": str(downloads), "RELEASE_ASSET_DIR": str(stage)}
+    run_step("Collect archives", repo, env)
+    run_step("Generate checksums", stage, env)
+
+    assert {p.name for p in stage.iterdir()} == {*archives, "checksums.txt"}
+    for filename, content in archives.items():
+        assert (stage / filename).read_bytes() == content
+    expected = {
+        f"{hashlib.sha256(content).hexdigest()}  {filename}"
+        for filename, content in archives.items()
+    }
+    checksum = stage / "checksums.txt"
+    assert checksum.stat().st_size >= 1, "GitHub ReleaseAsset upload requires nonempty content"
+    lines = checksum.read_text().splitlines()
+    if not archives:
+        assert checksum.read_text() == "# No packaged release assets.\n"
+        assert all(line.startswith("#") for line in lines)
+    hash_entries = [line for line in lines if not line.startswith("#")]
+    assert set(hash_entries) == expected
+    assert "must never become an asset checksum" not in checksum.read_text()
+    assert (config / "publish-artifacts.toml").read_text() == "tracked configuration\n"
+    assert (config / "do-not-upload.zip").exists()
+
+
+def test_upload_and_verification_use_the_isolated_asset_directory():
+    text = WORKFLOW.read_text(encoding="utf-8")
+    release_job = text.split("\n  release:\n", 1)[1]
+    assert "path: ${{ env.RELEASE_DOWNLOAD_DIR }}" in release_job
+    assert '--asset-dir "$RELEASE_ASSET_DIR"' in release_job
+    assert "working-directory: ${{ env.RELEASE_ASSET_DIR }}" in release_job
+    upload = release_job.split("      - name: Create GitHub Release\n", 1)[1]
+    assert "files: |\n            ${{ env.RELEASE_ASSET_DIR }}/*" in upload
+    assert "release/*" not in upload
+
+
+@pytest.mark.parametrize(
+    ("channels", "expected"),
+    [
+        ("", "false"),
+        ("github_release", "false"),
+        ("crates_io", "true"),
+        ("github_release, crates_io ", "true"),
+        ("crates_io,github_release", "true"),
+        ("not_crates_io", "false"),
+    ],
+)
+def test_retry_channel_selection_skips_only_preserved_crates(tmp_path, channels, expected):
+    output = tmp_path / "output"
+    run_step("Read channel retry selection", tmp_path, {
+        "ALREADY_PUBLISHED_CHANNELS": channels,
+        "GITHUB_OUTPUT": str(output),
+    })
+    assert output.read_text() == f"crates_already_published={expected}\n"
+    text = WORKFLOW.read_text(encoding="utf-8")
+    assert "crates_already_published: ${{ steps.retry_channels.outputs.crates_already_published }}" in text
+    publish_condition = re.search(r"\n  publish:\n    if: (.+)", text).group(1)
+    assert "needs.gate-and-tag.outputs.crates_already_published != 'true'" in publish_condition
+
+
+def test_staging_paths_use_the_runner_temporary_directory(tmp_path):
+    output = tmp_path / "environment"
+    runner_temp = tmp_path / "runner temp"
+    run_step("Initialize release staging paths", tmp_path, {
+        "RUNNER_TEMP": str(runner_temp), "GITHUB_ENV": str(output),
+    })
+    assert output.read_text().splitlines() == [
+        f"RELEASE_DOWNLOAD_DIR={runner_temp}/release-artifacts",
+        f"RELEASE_ASSET_DIR={runner_temp}/release-assets",
+    ]
