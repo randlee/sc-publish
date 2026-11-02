@@ -3822,7 +3822,15 @@ def test_asset_collection_isolated_from_tracked_release_files(tmp_path, with_arc
         f"{hashlib.sha256(content).hexdigest()}  {filename}"
         for filename, content in archives.items()
     }
-    assert set((stage / "checksums.txt").read_text().splitlines()) == expected
+    checksum = stage / "checksums.txt"
+    assert checksum.stat().st_size >= 1, "GitHub ReleaseAsset upload requires nonempty content"
+    lines = checksum.read_text().splitlines()
+    if not archives:
+        assert checksum.read_text() == "# No packaged release assets.\n"
+        assert all(line.startswith("#") for line in lines)
+    hash_entries = [line for line in lines if not line.startswith("#")]
+    assert set(hash_entries) == expected
+    assert "must never become an asset checksum" not in checksum.read_text()
     assert (config / "publish-artifacts.toml").read_text() == "tracked configuration\n"
     assert (config / "do-not-upload.zip").exists()
 
