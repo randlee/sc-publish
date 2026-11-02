@@ -634,6 +634,11 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          # The preceding setup step supplies runner-temp staging paths in
+          # Actions.  Keep the historical relative paths as deterministic
+          # fallbacks so this step is also independently runnable.
+          RELEASE_DOWNLOAD_DIR="${RELEASE_DOWNLOAD_DIR:-artifacts}"
+          RELEASE_ASSET_DIR="${RELEASE_ASSET_DIR:-release}"
           # SDK-only builds may have no uploaded artifacts (and no download directory).
           mkdir -p "$RELEASE_DOWNLOAD_DIR" "$RELEASE_ASSET_DIR"
           find "$RELEASE_DOWNLOAD_DIR" -type f \( -name '*.tar.gz' -o -name '*.zip' -o -name '*.tgz' -o -name '*.whl' \) -exec mv -f {} "$RELEASE_ASSET_DIR/" \;
