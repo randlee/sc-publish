@@ -1,0 +1,40 @@
+---
+name: sc-publish-pr-bug-fix
+version: 1.0.0
+description: Body of an sc-publish bug-fix pull request. Every field is required and must not be empty.
+required_variables:
+  - submitting_repo
+  - submitting_agent
+  - issue_link
+  - reproduction
+  - fix_summary
+  - affected_consumers
+---
+## Bug fix
+
+- Submitting repository: {{ submitting_repo }}
+- Submitting agent: {{ submitting_agent }}
+- Issue: {{ issue_link }}
+
+## Reproduction
+
+{{ reproduction }}
+
+## Fix
+
+{{ fix_summary }}
+
+## Consumers affected by the defect
+
+{{ affected_consumers }}
+
+## Checklist
+
+- [ ] The linked issue describes the defect and how to reproduce it.
+- [ ] A test fails before the fix and passes after it.
+- [ ] The change does nothing beyond what the fix needs.
+- [ ] No kit file names, detects or special-cases a repository, path, command, toolchain or policy.
+- [ ] The kit adds no gate of its own; consumer-declared checks remain the consumer's.
+- [ ] No new input, secret, file, tool, version floor or manual step is required of consumers.
+
+Review against [CONTRIBUTING.md](https://github.com/randlee/sc-publish/blob/develop/CONTRIBUTING.md) is requested.

@@ -9,12 +9,27 @@ needs.
 There are no exceptions for urgency, for a release in progress, or for a
 change that is "only small".
 
+## Kinds of pull request
+
+- **Bug fix.** The kit does not behave as documented or as a reasonable
+  user would expect: it crashes, returns a wrong result or exit code, or
+  fails for a valid configuration. A bug fix links the issue that describes the
+  defect and how to reproduce it, includes a test that fails before the fix
+  and passes after it, and changes nothing beyond what the fix needs. Bug
+  fixes are always welcome.
+- **Improvement.** Anything that adds or changes behaviour. An improvement
+  must meet rule 1 below.
+
+Rules 2 to 6 apply to both kinds. A bug fix that adds a gate, a
+repository-specific branch or a consumer requirement is rejected like any
+other change.
+
 ## Rules
 
-1. **Every change must make sc-publish simpler, easier to adopt, or more
-   extensible for consuming repositories.** A change that does none of these
-   does not belong in the kit. A change that makes the kit harder to
-   understand, configure or adopt is rejected, whatever it adds.
+1. **Every improvement must make sc-publish simpler, easier to adopt, or
+   more extensible for consuming repositories.** An improvement that does
+   none of these does not belong in the kit. A change that makes the kit
+   harder to understand, configure or adopt is rejected, whatever it adds.
 
 2. **Every change must be repository-agnostic.** Kit files must not name,
    detect or special-case any repository, path, command, toolchain or
@@ -39,6 +54,32 @@ change that is "only small".
 6. **Consumers never patch the kit locally.** Vendored kit files are not
    edited in consuming repositories. A gap is reported as an issue on
    randlee/sc-publish that describes the generic extension point needed.
+
+## Opening a pull request
+
+Every pull request body is rendered with sc-compose in strict mode from the
+template for its kind:
+
+- bug fix: `.github/sc-publish-pr-bug-fix.md.j2`
+- improvement: `.github/sc-publish-pr-improvement.md.j2`
+
+```sh
+sc-compose render --strict --var-file pr-vars.json \
+  --file .github/sc-publish-pr-improvement.md.j2 --output pr-body.md
+```
+
+Pull requests are written mostly by agents, and the strict render refuses a
+body with a field missing. Every field must also carry real content; an
+empty or placeholder value is treated as missing.
+
+Every checklist item must be ticked. An item that cannot honestly be ticked
+means the pull request is not ready. A change whose only value is to the
+submitting repository is not a kit change; it belongs in that repository's
+own configuration.
+
+Review is the enforcement. A reviewer rejects a pull request whose body was
+not rendered from the right template, has an empty field or an unticked
+item, or names no benefit to other consumers.
 
 ## Review
 
