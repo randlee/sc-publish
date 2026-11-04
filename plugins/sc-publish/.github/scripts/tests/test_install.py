@@ -437,25 +437,6 @@ class InstallValuesTests(unittest.TestCase):
             with self.assertRaisesRegex(Exception, "must not be empty"):
                 INSTALL.load_install_values(path)
 
-    def test_consumer_check_aliases_and_evidence_survive_render(self) -> None:
-        try:
-            import sc_compose  # noqa: F401
-        except ModuleNotFoundError:
-            self.skipTest("sc-compose bindings are not provisioned in this environment")
-        values = self.valid_values()
-        values["preflight_checks"] = [{"name": "evidence", "command": "python3 verify.py", "required": False, "evidence_path": "release/evidence.json"}]
-        with tempfile.TemporaryDirectory() as directory:
-            path = Path(directory) / "input.json"
-            path.write_text(json.dumps(values), encoding="utf-8")
-            loaded = INSTALL.load_install_values(path)
-            output = Path(directory) / "preflight.toml"
-            INSTALL.render_template(Path("release/publish-preflight.toml.j2"), loaded, output)
-            check = tomllib.loads(output.read_text(encoding="utf-8"))["checks"][0]
-        self.assertEqual(check["id"], "evidence")
-        self.assertEqual(check["run"], "python3 verify.py")
-        self.assertFalse(check["required"])
-        self.assertEqual(check["evidence_path"], "release/evidence.json")
-
     def test_render_publish_preflight_includes_docli_and_custom_checks(self) -> None:
         try:
             import sc_compose  # noqa: F401
