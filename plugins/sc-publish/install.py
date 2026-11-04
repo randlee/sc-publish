@@ -354,21 +354,24 @@ def load_install_values(path: Path) -> dict[str, object]:
     if "homebrew" in channels or "scoop" in channels:
         _require_string(project.get("renderer_archive_path"), "project.renderer_archive_path")
 
-    preflight_checks: list[dict[str, str]] = []
+    preflight_checks: list[dict[str, object]] = []
     if "preflight_checks" in values:
         for position, entry in enumerate(
             _require_array(values["preflight_checks"], "preflight_checks"), start=1
         ):
-            mapping = _require_mapping(entry, f"preflight_checks[{position}]")
-            preflight_checks.append(
-                {
-                    "id": _require_string(mapping.get("id"), f"preflight_checks[{position}].id"),
-                    "description": _require_string(
-                        mapping.get("description"), f"preflight_checks[{position}].description"
-                    ),
-                    "run": _require_string(mapping.get("run"), f"preflight_checks[{position}].run"),
-                }
-            )
+            label = f"preflight_checks[{position}]"
+            mapping = _require_mapping(entry, label)
+            required = mapping.get("required", True)
+            if type(required) is not bool:
+                raise argparse.ArgumentTypeError(f"{label}.required must be a boolean")
+            check = {
+                "id": _require_string(mapping.get("id", mapping.get("name")), f"{label}.id"),
+                "description": _require_string(mapping.get("description", "Consumer preflight check"), f"{label}.description"),
+                "run": _require_string(mapping.get("run", mapping.get("command")), f"{label}.run"),
+                "required": required,
+                "evidence_path": _require_string(mapping["evidence_path"], f"{label}.evidence_path") if "evidence_path" in mapping else "",
+            }
+            preflight_checks.append(check)
     values["preflight_checks"] = preflight_checks
 
     docli_value = values.get("docli")

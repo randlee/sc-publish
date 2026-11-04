@@ -32,4 +32,6 @@ run = "bash .github/scripts/release-preflight-docli.sh"
 id = {{ check.id }}
 description = {{ check.description }}
 run = {{ check.run }}
+required = {{ check.required }}
+evidence_path = {{ check.evidence_path }}
 {% endfor %}
