@@ -32,7 +32,7 @@ Tick every item. An unticked item is a reason to reject the pull request.
 
 - [ ] The change makes sc-publish simpler, easier to adopt, or more extensible for consuming repositories.
 - [ ] No kit file names, detects or special-cases a repository, path, command, toolchain or policy.
-- [ ] New behaviour is an opt-in extension point, and a test proves a repository that does not opt in is unchanged.
+- [ ] Any new behaviour is an opt-in extension point, and a test proves a repository that does not opt in is unchanged.
 - [ ] No mandatory gate or built-in check is added; a publish still fails only on a manifest, credential or registry error.
 - [ ] No new input, secret, file, tool, version floor or manual step is required of repositories that do not opt in.
 - [ ] No vendored kit file was patched in a consuming repository to work around this gap.
