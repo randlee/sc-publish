@@ -40,6 +40,24 @@ change that is "only small".
    edited in consuming repositories. A gap is reported as an issue on
    randlee/sc-publish that describes the generic extension point needed.
 
+## Opening a pull request
+
+Every pull request body is rendered from
+`.github/sc-publish-pr-template.md.j2` with sc-compose in strict mode, so
+no field can be left out:
+
+```sh
+sc-compose render --strict --var-file pr-vars.json \
+  --file .github/sc-publish-pr-template.md.j2 --output pr-body.md
+```
+
+The body must name the submitting repository and agent, and justify the
+change's value to the other repositories that consume the kit. A change
+whose only value is to the submitting repository is not a kit change; it
+belongs in that repository's own configuration. Pull requests opened
+without a rendered body, or with a justification that names no benefit to
+other consumers, are rejected.
+
 ## Review
 
 Reviewers check every pull request against the rules above and reject it
