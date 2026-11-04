@@ -1,6 +1,6 @@
 ---
 name: sc-publish-pr
-version: 1.0.0
+version: 1.1.0
 description: Body of every sc-publish pull request. Every field is required.
 required_variables:
   - submitting_repo
@@ -26,8 +26,19 @@ required_variables:
 
 {{ non_adopter_impact }}
 
----
+## Compliance checklist
 
-This pull request is reviewed against [CONTRIBUTING.md](../CONTRIBUTING.md).
-A pull request whose value is limited to the submitting repository, or that
-adds any requirement for repositories that do not opt in, is rejected.
+Tick every item. An unticked item is a reason to reject the pull request.
+
+- [ ] The change makes sc-publish simpler, easier to adopt, or more extensible for consuming repositories.
+- [ ] No kit file names, detects or special-cases a repository, path, command, toolchain or policy.
+- [ ] New behaviour is an opt-in extension point, and a test proves a repository that does not opt in is unchanged.
+- [ ] No mandatory gate or built-in check is added; a publish still fails only on a manifest, credential or registry error.
+- [ ] No new input, secret, file, tool, version floor or manual step is required of repositories that do not opt in.
+- [ ] No vendored kit file was patched in a consuming repository to work around this gap.
+
+## Review requested
+
+Review against [CONTRIBUTING.md](../CONTRIBUTING.md) is requested. A pull
+request whose value is limited to the submitting repository, or that adds
+any requirement for repositories that do not opt in, is rejected.

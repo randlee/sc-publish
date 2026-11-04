@@ -54,9 +54,11 @@ sc-compose render --strict --var-file pr-vars.json \
 The body must name the submitting repository and agent, and justify the
 change's value to the other repositories that consume the kit. A change
 whose only value is to the submitting repository is not a kit change; it
-belongs in that repository's own configuration. Pull requests opened
-without a rendered body, or with a justification that names no benefit to
-other consumers, are rejected.
+belongs in that repository's own configuration. Every item on the
+template's compliance checklist must be ticked, and the body requests
+review against this document. Pull requests opened without a rendered body,
+with an unticked checklist item, or with a justification that names no
+benefit to other consumers are rejected.
 
 ## Review
 
