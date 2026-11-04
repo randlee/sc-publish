@@ -9,12 +9,26 @@ needs.
 There are no exceptions for urgency, for a release in progress, or for a
 change that is "only small".
 
+## Kinds of pull request
+
+- **Bug fix.** The kit does not do what its documentation says, or it fails
+  for a valid configuration. A bug fix links the issue that describes the
+  defect and how to reproduce it, includes a test that fails before the fix
+  and passes after it, and changes nothing beyond what the fix needs. Bug
+  fixes are always welcome.
+- **Improvement.** Anything that adds or changes behaviour. An improvement
+  must meet rule 1 below.
+
+Rules 2 to 6 apply to both kinds. A bug fix that adds a gate, a
+repository-specific branch or a consumer requirement is rejected like any
+other change.
+
 ## Rules
 
-1. **Every change must make sc-publish simpler, easier to adopt, or more
-   extensible for consuming repositories.** A change that does none of these
-   does not belong in the kit. A change that makes the kit harder to
-   understand, configure or adopt is rejected, whatever it adds.
+1. **Every improvement must make sc-publish simpler, easier to adopt, or
+   more extensible for consuming repositories.** An improvement that does
+   none of these does not belong in the kit. A change that makes the kit
+   harder to understand, configure or adopt is rejected, whatever it adds.
 
 2. **Every change must be repository-agnostic.** Kit files must not name,
    detect or special-case any repository, path, command, toolchain or
@@ -51,8 +65,9 @@ sc-compose render --strict --var-file pr-vars.json \
   --file .github/sc-publish-pr-template.md.j2 --output pr-body.md
 ```
 
-The body must name the submitting repository and agent, and justify the
-change's value to the other repositories that consume the kit. A change
+The body must name the submitting repository and agent and the kind of
+pull request, and justify the change's value to the other repositories that
+consume the kit. For a bug fix, that is which consumers the defect affects. A change
 whose only value is to the submitting repository is not a kit change; it
 belongs in that repository's own configuration. Every item on the
 template's compliance checklist must be ticked, and the body requests

@@ -1,10 +1,11 @@
 ---
 name: sc-publish-pr
-version: 1.1.0
+version: 1.2.0
 description: Body of every sc-publish pull request. Every field is required.
 required_variables:
   - submitting_repo
   - submitting_agent
+  - change_kind
   - summary
   - value_to_other_repos
   - non_adopter_impact
@@ -15,6 +16,8 @@ required_variables:
 - Agent: {{ submitting_agent }}
 
 ## Change
+
+Kind: {{ change_kind }} (bug fix or improvement)
 
 {{ summary }}
 
@@ -28,9 +31,10 @@ required_variables:
 
 ## Compliance checklist
 
-Tick every item. An unticked item is a reason to reject the pull request.
+Tick every item that applies to the kind of change; mark the other kind's item N/A. An unticked item is a reason to reject the pull request.
 
-- [ ] The change makes sc-publish simpler, easier to adopt, or more extensible for consuming repositories.
+- [ ] Bug fix: links the issue describing the defect, and a test fails before the fix and passes after it.
+- [ ] Improvement: the change makes sc-publish simpler, easier to adopt, or more extensible for consuming repositories.
 - [ ] No kit file names, detects or special-cases a repository, path, command, toolchain or policy.
 - [ ] Any new behaviour is an opt-in extension point, and a test proves a repository that does not opt in is unchanged.
 - [ ] No mandatory gate or built-in check is added; a publish still fails only on a manifest, credential or registry error.
