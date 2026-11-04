@@ -1,3 +1,4 @@
 .kitenv/
 .pytest_cache/
 __pycache__/
+.sc-compose/

@@ -11,8 +11,9 @@ change that is "only small".
 
 ## Kinds of pull request
 
-- **Bug fix.** The kit does not do what its documentation says, or it fails
-  for a valid configuration. A bug fix links the issue that describes the
+- **Bug fix.** The kit does not behave as documented or as a reasonable
+  user would expect: it crashes, returns a wrong result or exit code, or
+  fails for a valid configuration. A bug fix links the issue that describes the
   defect and how to reproduce it, includes a test that fails before the fix
   and passes after it, and changes nothing beyond what the fix needs. Bug
   fixes are always welcome.
@@ -56,24 +57,29 @@ other change.
 
 ## Opening a pull request
 
-Every pull request body is rendered from
-`.github/sc-publish-pr-template.md.j2` with sc-compose in strict mode, so
-no field can be left out:
+Every pull request body is rendered with sc-compose in strict mode from the
+template for its kind:
+
+- bug fix: `.github/sc-publish-pr-bug-fix.md.j2`
+- improvement: `.github/sc-publish-pr-improvement.md.j2`
 
 ```sh
 sc-compose render --strict --var-file pr-vars.json \
-  --file .github/sc-publish-pr-template.md.j2 --output pr-body.md
+  --file .github/sc-publish-pr-improvement.md.j2 --output pr-body.md
 ```
 
-The body must name the submitting repository and agent and the kind of
-pull request, and justify the change's value to the other repositories that
-consume the kit. For a bug fix, that is which consumers the defect affects. A change
-whose only value is to the submitting repository is not a kit change; it
-belongs in that repository's own configuration. Every item on the
-template's compliance checklist must be ticked, and the body requests
-review against this document. Pull requests opened without a rendered body,
-with an unticked checklist item, or with a justification that names no
-benefit to other consumers are rejected.
+Pull requests are written mostly by agents, and the strict render refuses a
+body with a field missing. Every field must also carry real content; an
+empty or placeholder value is treated as missing.
+
+Every checklist item must be ticked. An item that cannot honestly be ticked
+means the pull request is not ready. A change whose only value is to the
+submitting repository is not a kit change; it belongs in that repository's
+own configuration.
+
+Review is the enforcement. A reviewer rejects a pull request whose body was
+not rendered from the right template, has an empty field or an unticked
+item, or names no benefit to other consumers.
 
 ## Review
 

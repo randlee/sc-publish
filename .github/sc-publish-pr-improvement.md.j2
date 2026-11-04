@@ -1,0 +1,38 @@
+---
+name: sc-publish-pr-improvement
+version: 1.0.0
+description: Body of an sc-publish improvement pull request. Every field is required and must not be empty.
+required_variables:
+  - submitting_repo
+  - submitting_agent
+  - summary
+  - value_to_other_repos
+  - non_adopter_impact
+---
+## Improvement
+
+- Submitting repository: {{ submitting_repo }}
+- Submitting agent: {{ submitting_agent }}
+
+## Change
+
+{{ summary }}
+
+## Value to other consuming repositories
+
+{{ value_to_other_repos }}
+
+## Impact on repositories that do not opt in
+
+{{ non_adopter_impact }}
+
+## Checklist
+
+- [ ] The change makes sc-publish simpler, easier to adopt, or more extensible for consuming repositories.
+- [ ] No kit file names, detects or special-cases a repository, path, command, toolchain or policy.
+- [ ] Any new behaviour is an opt-in extension point, and a test proves a repository that does not opt in is unchanged.
+- [ ] The kit adds no gate of its own; consumer-declared checks remain the consumer's.
+- [ ] No new input, secret, file, tool, version floor or manual step is required of repositories that do not opt in.
+- [ ] No vendored kit file was patched in a consuming repository to work around this gap.
+
+Review against [CONTRIBUTING.md](https://github.com/randlee/sc-publish/blob/develop/CONTRIBUTING.md) is requested.
