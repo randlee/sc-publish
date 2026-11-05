@@ -44,7 +44,7 @@ back publication can opt that check in:
 `before_publish` is optional and defaults to `false`. A check that sets it:
 
 - still runs in Release Preflight like any other check;
-- also runs, and must pass, before **every** publication path publishes: `release.yml`
+- also runs, and must pass, before each of these publication paths publishes: `release.yml`
   (before it creates or pushes a tag), and the `crates-publish`, `pypi-publish`,
   `npm-publish`, `homebrew-publish`, `winget-publish` and `scoop-publish` retry
   workflows (before any job that publishes). Each path calls the kit action
@@ -63,6 +63,11 @@ the environment, so you decide what "valid" means:
 Read the candidate commit with `git rev-parse HEAD` (the checked-out tag in the retry
 workflows) and compare it, and the hashes of the artifacts to be published, with your
 own evidence, as in the consumer-owned evidence check below.
+
+Not gated: `release-candidate.yml` (creates the candidate tag that `release.yml` later
+validates) and `prerelease-archive.yml` (runs on a pushed `prerelease/v*` tag and creates a
+GitHub prerelease). Neither is a release channel dispatch; a repository that needs a check
+there declares it in its own tag-protection or workflow rules.
 
 **Not opting in changes nothing.** With no `before_publish = true` check the action
 prints one line and exits before running any interpreter, the rendered
