@@ -86,18 +86,19 @@ runs:
           echo "sc-lint setup: could not download ${url}; verify that release v${SC_LINT_VERSION} publishes this runner asset" >&2
           exit 1
         }
-        tar -xzf "${RUNNER_TEMP}/${archive}" -C "${install_dir}"
-        test -x "${install_dir}/sc-lint" || {
+        tar -xzf "${RUNNER_TEMP}/${archive}" -C "${install_dir}" --strip-components=1
+        bin_dir="${install_dir}/bin"
+        test -x "${bin_dir}/sc-lint" || {
           echo "sc-lint setup: release archive is missing executable sc-lint" >&2
           exit 1
         }
         for backend in sc-lint-boundary sc-lint-portability sc-lint-runtime; do
-          test -x "${install_dir}/${backend}" || {
+          test -x "${bin_dir}/${backend}" || {
             echo "sc-lint setup: release archive is missing sibling backend ${backend}" >&2
             exit 1
           }
         done
-        echo "${install_dir}" >> "${GITHUB_PATH}"
+        echo "${bin_dir}" >> "${GITHUB_PATH}"
     - name: Install sc-lint release (Windows)
       if: runner.os == 'Windows' && env.SC_LINT_SOURCE_REVISION == ''
       shell: pwsh
@@ -121,12 +122,13 @@ runs:
           throw "sc-lint setup: could not download $url; verify that release v$env:SC_LINT_VERSION publishes this runner asset. $($_.Exception.Message)"
         }
         Expand-Archive -Path $archivePath -DestinationPath $installDir -Force
+        $binDir = Join-Path (Join-Path $installDir "sc-lint_$env:SC_LINT_VERSION`_$target") 'bin'
         foreach ($binary in @('sc-lint.exe', 'sc-lint-boundary.exe', 'sc-lint-portability.exe', 'sc-lint-runtime.exe')) {
-          if (-not (Test-Path (Join-Path $installDir $binary))) {
+          if (-not (Test-Path (Join-Path $binDir $binary))) {
             throw "sc-lint setup: release archive is missing sibling backend $binary"
           }
         }
-        Add-Content -Path $env:GITHUB_PATH -Value $installDir
+        Add-Content -Path $env:GITHUB_PATH -Value $binDir
     - name: Verify sc-lint version contract
       if: runner.os != 'Windows' && env.SC_LINT_SOURCE_REVISION == ''
       shell: bash
@@ -137,7 +139,7 @@ runs:
         set -euo pipefail
         version_json="$(sc-lint version --json)"
         jq -e --arg expected "${SC_LINT_VERSION}" \
-          '.ok == true and .data.crate_version == $expected' \
+          '.ok == true and .data.version == $expected' \
           <<<"${version_json}" >/dev/null || {
           echo "sc-lint setup: version contract failed; expected ${SC_LINT_VERSION}" >&2
           exit 1
@@ -150,8 +152,8 @@ runs:
         SC_LINT_REPOSITORY: ${{ inputs.repository }}
       run: |
         $value = sc-lint version --json | ConvertFrom-Json
-        if (-not $value.ok -or $value.data.crate_version -ne $env:SC_LINT_VERSION) {
-          throw "sc-lint setup: expected version $env:SC_LINT_VERSION, got $($value.data.crate_version)"
+        if (-not $value.ok -or $value.data.version -ne $env:SC_LINT_VERSION) {
+          throw "sc-lint setup: expected version $env:SC_LINT_VERSION, got $($value.data.version)"
         }
     - name: Materialize pinned sc-lint Python utilities (Unix)
       if: runner.os != 'Windows' && env.SC_LINT_SOURCE_REVISION == ''
@@ -171,7 +173,6 @@ runs:
         mkdir -p "${GITHUB_WORKSPACE}/.just"
         cp "${source_root}/.just/"*.py "${GITHUB_WORKSPACE}/.just/"
         printf '%s\n' "${SC_LINT_VERSION}" > "${GITHUB_WORKSPACE}/.just/.sc-lint-runtime-version"
-        test -f "${GITHUB_WORKSPACE}/.just/run_lint.py"
     - name: Materialize pinned sc-lint Python utilities (Windows)
       if: runner.os == 'Windows' && env.SC_LINT_SOURCE_REVISION == ''
       shell: pwsh
@@ -189,9 +190,6 @@ runs:
         New-Item -ItemType Directory -Force -Path $justRoot | Out-Null
         Copy-Item (Join-Path $extracted.FullName '.just\*.py') $justRoot -Force
         Set-Content -Path (Join-Path $justRoot '.sc-lint-runtime-version') -Value $env:SC_LINT_VERSION -NoNewline
-        if (-not (Test-Path (Join-Path $justRoot 'run_lint.py'))) {
-          throw 'sc-lint setup: source archive is missing .just/run_lint.py'
-        }
     - name: Smoke-test repository root discovery (Unix)
       if: runner.os != 'Windows' && env.SC_LINT_SOURCE_REVISION == ''
       shell: bash
