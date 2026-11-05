@@ -12,6 +12,13 @@ inputs:
   publish_path:
     description: Name of the publication path running the gate (for example crates-publish or release).
     required: true
+  release_version:
+    description: >-
+      Bare version (for example 1.4.1) when the path computes it itself, as
+      for prefixed tags such as prerelease/v1.4.1. Defaults to release_tag
+      without a leading v.
+    required: false
+    default: ""
 
 runs:
   using: composite
@@ -21,6 +28,7 @@ runs:
       env:
         RELEASE_TAG: ${{ inputs.release_tag }}
         PUBLISH_PATH: ${{ inputs.publish_path }}
+        RELEASE_VERSION_INPUT: ${{ inputs.release_version }}
       run: |
         set -euo pipefail
         manifest="release/publish-preflight.toml"
@@ -31,5 +39,5 @@ runs:
         fi
         # Candidate bindings handed to the consumer's own commands.
         export RELEASE_TAG PUBLISH_PATH
-        export RELEASE_VERSION="${RELEASE_TAG#v}"
+        export RELEASE_VERSION="${RELEASE_VERSION_INPUT:-${RELEASE_TAG#v}}"
         bash .github/scripts/run-consumer-preflight.sh --publish

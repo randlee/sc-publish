@@ -33,6 +33,7 @@ PUBLISH_PATHS = {
     "homebrew-publish.yml": ("verify-release", "homebrew-publish"),
     "winget-publish.yml": ("verify-release", "winget-publish"),
     "scoop-publish.yml": ("verify-release", "scoop-publish"),
+    "prerelease-archive.yml": ("plan", "prerelease-archive"),
 }
 
 
@@ -55,10 +56,10 @@ def action_step():
     return yaml.safe_load(ACTION.read_text())["runs"]["steps"][0]
 
 
-def run_action(root, tag="v1.2.3", path="crates-publish", python_shim=None):
+def run_action(root, tag="v1.2.3", path="crates-publish", python_shim=None, version=""):
     script = root / "gate-step.sh"
     script.write_text(action_step()["run"])
-    env = dict(os.environ, RELEASE_TAG=tag, PUBLISH_PATH=path)
+    env = dict(os.environ, RELEASE_TAG=tag, PUBLISH_PATH=path, RELEASE_VERSION_INPUT=version)
     if python_shim is not None:
         env["PATH"] = f"{python_shim}{os.pathsep}{env['PATH']}"
     return subprocess.run(["bash", str(script)], cwd=root, env=env, capture_output=True, text=True)
@@ -156,6 +157,20 @@ def test_action_binds_candidate_through_environment(tmp_path):
     assert (tmp_path / "seen").read_text() == "v2.5.1|2.5.1|scoop-publish"
 
 
+def test_explicit_version_is_used_for_prefixed_tags(tmp_path):
+    # prerelease-archive.yml tags are prefixed (prerelease/vX.Y.Z) and the workflow
+    # computes the bare version itself; the candidate must not be derived from the tag.
+    make_repo(tmp_path,
+        "[[checks]]\nid='gate'\nrun='printf \"%s|%s\" \"$RELEASE_TAG\" \"$RELEASE_VERSION\" > seen'\n"
+        "before_publish=true\n")
+    assert run_action(tmp_path, tag="prerelease/v1.2.3", version="1.2.3",
+                      path="prerelease-archive").returncode == 0
+    assert (tmp_path / "seen").read_text() == "prerelease/v1.2.3|1.2.3"
+    # A prefix that does not start with v is bound the same way.
+    assert run_action(tmp_path, tag="pre/4.5.6", version="4.5.6").returncode == 0
+    assert (tmp_path / "seen").read_text() == "pre/4.5.6|4.5.6"
+
+
 def test_action_fails_closed_if_runner_is_missing(tmp_path):
     (tmp_path / "release").mkdir()
     (tmp_path / "release/publish-preflight.toml").write_text(
@@ -202,6 +217,42 @@ def test_every_publication_path_runs_the_gate_before_anything_publishes(workflow
     if workflow == "release.yml":
         tag_step = next(i for i, s in enumerate(steps) if s.get("name") == "Ensure tag is correct or create it")
         assert index < tag_step
+
+
+def test_prerelease_gate_binds_the_version_the_workflow_computed():
+    steps = load("prerelease-archive.yml")["jobs"]["plan"]["steps"]
+    version_index = next(i for i, s in enumerate(steps) if s.get("id") == "version")
+    gate_index = next(i for i, s in enumerate(steps) if s.get("uses") == "./.github/actions/run-publish-gate")
+    assert gate_index > version_index  # the gate sees the validated version
+    with_ = steps[gate_index]["with"]
+    assert with_["release_tag"] == "${{ github.ref_name }}"
+    assert with_["release_version"] == "${{ steps.version.outputs.value }}"
+
+
+# Anything that creates a release, uploads a package or pushes a tag/branch to a
+# channel. A workflow containing one must be a gated path, or be the single
+# candidate-tag workflow below.
+PUBLISH_MARKERS = (
+    "gh release create", "gh release upload", "gh release edit", "cargo publish",
+    "npm_release.py publish", "twine upload", "maturin upload", "softprops/action-gh-release",
+    "winget-releaser", "git push", "git tag ",
+)
+CANDIDATE_TAG_PUSH = 'git push origin "refs/tags/${candidate_tag}"'
+
+
+def test_every_workflow_with_a_publish_marker_is_gated_or_candidate_tag_only():
+    for path in sorted(WORKFLOWS.glob("*.yml")):
+        text = path.read_text()
+        if path.name == "release-candidate.yml":
+            # Only creates/pushes the release-candidate-vX.Y.Z tag; it cannot create a
+            # release, upload an asset or publish a package.
+            remainder = text.replace(CANDIDATE_TAG_PUSH, "")
+            assert CANDIDATE_TAG_PUSH in text
+            assert [m for m in PUBLISH_MARKERS if m in remainder and m not in ("git tag ",)] == []
+            continue
+        found = [m for m in PUBLISH_MARKERS if m in text]
+        if found:
+            assert path.name in PUBLISH_PATHS, f"{path.name} has {found} but no publish gate"
 
 
 def test_any_workflow_declaring_an_environment_is_a_gated_publication_path():

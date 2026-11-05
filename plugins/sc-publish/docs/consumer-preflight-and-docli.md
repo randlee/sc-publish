@@ -45,9 +45,10 @@ back publication can opt that check in:
 
 - still runs in Release Preflight like any other check;
 - also runs, and must pass, before each of these publication paths publishes: `release.yml`
-  (before it creates or pushes a tag), and the `crates-publish`, `pypi-publish`,
-  `npm-publish`, `homebrew-publish`, `winget-publish` and `scoop-publish` retry
-  workflows (before any job that publishes). Each path calls the kit action
+  (before it creates or pushes a tag), `prerelease-archive.yml` (before it builds or creates
+  the GitHub prerelease), and the `crates-publish`, `pypi-publish`, `npm-publish`,
+  `homebrew-publish`, `winget-publish` and `scoop-publish` retry workflows (before any job
+  that publishes). Each path calls the kit action
   `.github/actions/run-publish-gate`, which runs
   `.github/scripts/run-consumer-preflight.sh --publish` (only the opted-in checks).
 
@@ -56,18 +57,19 @@ the environment, so you decide what "valid" means:
 
 | Variable | Value |
 |---|---|
-| `RELEASE_TAG` | candidate tag, for example `v1.4.1` |
-| `RELEASE_VERSION` | the tag without the leading `v` |
-| `PUBLISH_PATH` | the path running the gate: `release`, `crates-publish`, `pypi-publish`, `npm-publish`, `homebrew-publish`, `winget-publish` or `scoop-publish` |
+| `RELEASE_TAG` | candidate tag, for example `v1.4.1`; for `prerelease-archive` the pushed tag, for example `prerelease/v1.4.1` |
+| `RELEASE_VERSION` | the bare version, for example `1.4.1`: the tag without a leading `v`, or, for `prerelease-archive`, the version that workflow validated from the tag and your `prerelease.tag_prefix` |
+| `PUBLISH_PATH` | the path running the gate: `release`, `prerelease-archive`, `crates-publish`, `pypi-publish`, `npm-publish`, `homebrew-publish`, `winget-publish` or `scoop-publish` |
 
 Read the candidate commit with `git rev-parse HEAD` (the checked-out tag in the retry
 workflows) and compare it, and the hashes of the artifacts to be published, with your
 own evidence, as in the consumer-owned evidence check below.
 
-Not gated: `release-candidate.yml` (creates the candidate tag that `release.yml` later
-validates) and `prerelease-archive.yml` (runs on a pushed `prerelease/v*` tag and creates a
-GitHub prerelease). Neither is a release channel dispatch; a repository that needs a check
-there declares it in its own tag-protection or workflow rules.
+Not gated: `release-candidate.yml`. It only creates and pushes the
+`release-candidate-vX.Y.Z` tag from `origin/develop`; it cannot create a GitHub Release,
+upload an asset or publish a package. The `release.yml` run that follows validates that tag
+and is gated. A test fails if any other workflow gains a publish marker (`gh release
+create`, `cargo publish`, `twine upload`, a tag or branch push, ...) without the gate.
 
 **Not opting in changes nothing.** With no `before_publish = true` check the action
 prints one line and exits before running any interpreter, the rendered

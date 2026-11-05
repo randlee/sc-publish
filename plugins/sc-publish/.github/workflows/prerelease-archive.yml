@@ -60,6 +60,12 @@ jobs:
           echo "has_release_binaries=$(jq -r .has_release_binaries <<<"$plan")" >> "$GITHUB_OUTPUT"
           echo "has_python_wheels=$(jq -r .has_python_wheels <<<"$plan")" >> "$GITHUB_OUTPUT"
           echo "has_python_sdists=$(jq -r .has_python_sdists <<<"$plan")" >> "$GITHUB_OUTPUT"
+      - name: Run opted-in consumer publish gate
+        uses: ./.github/actions/run-publish-gate
+        with:
+          release_tag: ${{ github.ref_name }}
+          release_version: ${{ steps.version.outputs.value }}
+          publish_path: prerelease-archive
       - id: matrix
         shell: bash
         run: |
