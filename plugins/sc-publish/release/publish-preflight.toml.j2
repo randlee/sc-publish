@@ -32,4 +32,7 @@ run = "bash .github/scripts/release-preflight-docli.sh"
 id = {{ check.id }}
 description = {{ check.description }}
 run = {{ check.run }}
+{% if check.before_publish == "true" %}
+before_publish = true
+{% endif %}
 {% endfor %}

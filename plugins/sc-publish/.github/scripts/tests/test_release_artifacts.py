@@ -1037,6 +1037,7 @@ def test_no_single_repo_concerns_leak_into_kit_workflows_actions_or_scripts() ->
     kit_actions = (
         "extract-published-renderer",
         "install-linux-native-deps",
+        "run-publish-gate",
         "setup-lint-toolchain",
         "setup-python-release-build",
         "setup-renderer",

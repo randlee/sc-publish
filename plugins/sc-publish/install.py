@@ -354,21 +354,24 @@ def load_install_values(path: Path) -> dict[str, object]:
     if "homebrew" in channels or "scoop" in channels:
         _require_string(project.get("renderer_archive_path"), "project.renderer_archive_path")
 
-    preflight_checks: list[dict[str, str]] = []
+    preflight_checks: list[dict[str, Any]] = []
     if "preflight_checks" in values:
         for position, entry in enumerate(
             _require_array(values["preflight_checks"], "preflight_checks"), start=1
         ):
             mapping = _require_mapping(entry, f"preflight_checks[{position}]")
-            preflight_checks.append(
-                {
-                    "id": _require_string(mapping.get("id"), f"preflight_checks[{position}].id"),
-                    "description": _require_string(
-                        mapping.get("description"), f"preflight_checks[{position}].description"
-                    ),
-                    "run": _require_string(mapping.get("run"), f"preflight_checks[{position}].run"),
-                }
-            )
+            check = {
+                "id": _require_string(mapping.get("id"), f"preflight_checks[{position}].id"),
+                "description": _require_string(
+                    mapping.get("description"), f"preflight_checks[{position}].description"
+                ),
+                "run": _require_string(mapping.get("run"), f"preflight_checks[{position}].run"),
+            }
+            if "before_publish" in mapping:
+                check["before_publish"] = _require_boolean(
+                    mapping["before_publish"], f"preflight_checks[{position}].before_publish"
+                )
+            preflight_checks.append(check)
     values["preflight_checks"] = preflight_checks
 
     docli_value = values.get("docli")
@@ -509,7 +512,7 @@ def template_values(values: dict[str, object]) -> dict[str, object]:
         }
     )
     preflight_checks = [
-        _toml_scalars(_require_mapping(check, "preflight_checks entry"))
+        _toml_scalars({"before_publish": False, **_require_mapping(check, "preflight_checks entry")})
         for check in _require_array(values.get("preflight_checks", []), "preflight_checks")
     ]
 

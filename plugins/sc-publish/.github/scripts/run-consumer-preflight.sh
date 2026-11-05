@@ -1,5 +1,10 @@
 #!/usr/bin/env bash
 # Run repository-specific checks declared in release/publish-preflight.toml.
+#
+#   run-consumer-preflight.sh             run every declared check (Release Preflight)
+#   run-consumer-preflight.sh --publish   run only checks that opt in with
+#                                         `before_publish = true`; called before a
+#                                         publication path publishes anything
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
@@ -11,7 +16,7 @@ if [[ ! -f "$MANIFEST" ]]; then
 fi
 
 cd "$ROOT"
-python3 - "$MANIFEST" <<'PY'
+python3 - "$MANIFEST" "${1:-}" <<'PY'
 import subprocess
 import sys
 from pathlib import Path
@@ -21,6 +26,9 @@ try:
 except ImportError:
     import tomli as tomllib  # type: ignore[no-redef]
 
+publish_mode = sys.argv[2] == "--publish"
+if sys.argv[2] not in ("", "--publish"):
+    sys.exit(f"run-consumer-preflight: unknown argument {sys.argv[2]!r}")
 manifest_path = Path(sys.argv[1]).resolve()
 root = manifest_path.parent.parent
 data = tomllib.loads(manifest_path.read_text(encoding="utf-8"))
@@ -38,6 +46,15 @@ for entry in checks:
         sys.exit("run-consumer-preflight: check id is required")
     if not isinstance(run, str) or not run.strip():
         sys.exit(f"run-consumer-preflight: {check_id}: command is required")
+
+if publish_mode:
+    for entry in checks:
+        if not isinstance(entry.get("before_publish", False), bool):
+            sys.exit(f"run-consumer-preflight: {entry.get('id', entry.get('name'))}: before_publish must be a boolean")
+    checks = [e for e in checks if e.get("before_publish") is True]
+    if not checks:
+        print("run-consumer-preflight: no checks opt in with before_publish; nothing to run")
+        sys.exit(0)
 
 failures: list[str] = []
 for entry in checks:

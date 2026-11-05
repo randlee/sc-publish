@@ -38,6 +38,11 @@ jobs:
       - uses: actions/checkout@v5
         with:
           ref: ${{ inputs.tag }}
+      - name: Run opted-in consumer publish gate
+        uses: ./.github/actions/run-publish-gate
+        with:
+          release_tag: ${{ inputs.tag }}
+          publish_path: pypi-publish
       - uses: ./.github/actions/verify-published-release
         with:
           release_tag: ${{ inputs.tag }}

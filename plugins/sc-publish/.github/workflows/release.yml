@@ -128,6 +128,12 @@ jobs:
           ALREADY_PUBLISHED_CHANNELS: ${{ inputs.already_published_channels }}
         run: .github/scripts/release_gate.sh final origin/main "release-candidate-${{ steps.meta.outputs.release_tag }}" '${{ steps.meta.outputs.release_version }}' "${RELEASE_ARTIFACT_MANIFEST}" '${{ steps.build_plan.outputs.workspace_toml }}' "${ALREADY_PUBLISHED_CHANNELS}"
 
+      - name: Run opted-in consumer publish gate
+        uses: ./.github/actions/run-publish-gate
+        with:
+          release_tag: ${{ steps.meta.outputs.release_tag }}
+          publish_path: release
+
       - name: Verify npm source at resolved release commit
         env:
           RELEASE_TAG: ${{ steps.meta.outputs.release_tag }}

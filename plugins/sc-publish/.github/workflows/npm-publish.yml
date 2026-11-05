@@ -24,6 +24,11 @@ jobs:
         with:
           ref: ${{ inputs.tag }}
           persist-credentials: false
+      - name: Run opted-in consumer publish gate
+        uses: ./.github/actions/run-publish-gate
+        with:
+          release_tag: ${{ inputs.tag }}
+          publish_path: npm-publish
       - uses: ./.github/actions/verify-published-release
         with:
           release_tag: ${{ inputs.tag }}

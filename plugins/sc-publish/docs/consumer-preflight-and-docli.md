@@ -24,6 +24,55 @@ single extension point.
 
 The runner is a no-op when the manifest is missing or declares no `[[checks]]`.
 
+## Opt-in publish gate (`before_publish`)
+
+Release Preflight is a dispatch of its own, so a publication workflow dispatched
+directly never runs it (sc-publish#156). A repository that wants a check to hold
+back publication can opt that check in:
+
+```json
+"preflight_checks": [
+  {
+    "id": "verify-matrix",
+    "description": "Release matrix evidence matches the candidate",
+    "run": "python3 scripts/verify-matrix-evidence.py release/evidence.json",
+    "before_publish": true
+  }
+]
+```
+
+`before_publish` is optional and defaults to `false`. A check that sets it:
+
+- still runs in Release Preflight like any other check;
+- also runs, and must pass, before **every** publication path publishes: `release.yml`
+  (before it creates or pushes a tag), and the `crates-publish`, `pypi-publish`,
+  `npm-publish`, `homebrew-publish`, `winget-publish` and `scoop-publish` retry
+  workflows (before any job that publishes). Each path calls the kit action
+  `.github/actions/run-publish-gate`, which runs
+  `.github/scripts/run-consumer-preflight.sh --publish` (only the opted-in checks).
+
+The kit ships no check of its own. The candidate is handed to your command through
+the environment, so you decide what "valid" means:
+
+| Variable | Value |
+|---|---|
+| `RELEASE_TAG` | candidate tag, for example `v1.4.1` |
+| `RELEASE_VERSION` | the tag without the leading `v` |
+| `PUBLISH_PATH` | the path running the gate: `release`, `crates-publish`, `pypi-publish`, `npm-publish`, `homebrew-publish`, `winget-publish` or `scoop-publish` |
+
+Read the candidate commit with `git rev-parse HEAD` (the checked-out tag in the retry
+workflows) and compare it, and the hashes of the artifacts to be published, with your
+own evidence, as in the consumer-owned evidence check below.
+
+**Not opting in changes nothing.** With no `before_publish = true` check the action
+prints one line and exits before running any interpreter, the rendered
+`release/publish-preflight.toml` is byte-for-byte what it was, and no input, secret,
+file, tool or version floor is added.
+
+Adoption: set `"before_publish": true` on the checks you want enforced in your
+`install.json`, re-run `install.py`, and commit the rendered manifest and the synced
+kit files.
+
 ## Optional sc-docli for customer-facing CLIs
 
 [sc-docli](https://crates.io/crates/sc-docli) generates committed CLI reference
