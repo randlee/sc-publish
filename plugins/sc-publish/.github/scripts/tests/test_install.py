@@ -146,6 +146,32 @@ class InstallValuesTests(unittest.TestCase):
             },
         }
 
+    def test_optional_registry_visibility_round_trips_without_changing_default(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            for declared in (None, False, True):
+                values = self.valid_values()
+                if declared is not None:
+                    values["crates"][0]["verify_registry_visibility"] = declared
+                source = root / "install.json"
+                source.write_text(json.dumps(values))
+                loaded = INSTALL.load_install_values(source)
+                rendered = root / "artifacts.toml"
+                INSTALL.render_template(Path("release/publish-artifacts.toml.j2"), loaded, rendered)
+                crate = tomllib.loads(rendered.read_text())["crates"][0]
+                self.assertEqual(crate.get("verify_registry_visibility"), declared)
+                self.assertEqual("verify_registry_visibility" in crate, declared is not None)
+
+    def test_registry_visibility_rejects_nonboolean_install_input(self) -> None:
+        for value in ("true", 1, None):
+            with self.subTest(value=value), tempfile.TemporaryDirectory() as directory:
+                values = self.valid_values()
+                values["crates"][0]["verify_registry_visibility"] = value
+                source = Path(directory) / "install.json"
+                source.write_text(json.dumps(values))
+                with self.assertRaisesRegex(Exception, "verify_registry_visibility"):
+                    INSTALL.load_install_values(source)
+
     def test_help_explains_the_explicit_install_workflow(self) -> None:
         result = subprocess.run(
             [sys.executable, "-S", str(INSTALLER), "--help"],

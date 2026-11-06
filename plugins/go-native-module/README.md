@@ -55,6 +55,10 @@ python3 .github/scripts/go_native_module.py verify-version-lockstep \
 ```
 
 `target-matrix` writes exactly one GitHub Actions matrix JSON object on
-success and no stdout on failure. `stage` validates all inputs before atomically
+success and no stdout on failure. Each native target uses the core
+`[[release_targets]]` row with the same Rust triple. A native target with no
+such row uses the runner and archive of the core rows for the same Go
+OS/architecture, so a Go-only triple needs no CLI build row; those rows must
+agree, and a coordinate with no core row is an error. `stage` validates all inputs before atomically
 creating a self-contained module with exactly `go.mod`, `README.md`, `go/`,
 `testdata/`, `native/targets.toml`, one matching archive, and `VERSION`.
