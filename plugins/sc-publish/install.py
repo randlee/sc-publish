@@ -171,6 +171,11 @@ def load_install_values(path: Path) -> dict[str, object]:
         _require_string(crate_value.get("package"), f"crates[{position}].package")
         _require_string(crate_value.get("cargo_toml"), f"crates[{position}].cargo_toml")
         publish = _require_boolean(crate_value.get("publish"), f"crates[{position}].publish")
+        if "verify_registry_visibility" in crate_value:
+            _require_boolean(
+                crate_value["verify_registry_visibility"],
+                f"crates[{position}].verify_registry_visibility",
+            )
         _require_non_negative_integer(
             crate_value.get("wait_after_publish_seconds"),
             f"crates[{position}].wait_after_publish_seconds",
@@ -463,6 +468,14 @@ def template_values(values: dict[str, object]) -> dict[str, object]:
             ]
         converted_channels[name] = converted
 
+    converted_crates = []
+    for crate_value in _require_array(values["crates"], "crates"):
+        crate = _require_mapping(crate_value, "crates entry")
+        converted = _toml_scalars(crate)
+        converted["has_verify_registry_visibility"] = "verify_registry_visibility" in crate
+        converted.setdefault("verify_registry_visibility", "false")
+        converted_crates.append(converted)
+
     release_binaries = []
     for binary_value in _require_array(values["release_binaries"], "release_binaries"):
         binary = _require_mapping(binary_value, "release_binaries entry")
@@ -520,10 +533,7 @@ def template_values(values: dict[str, object]) -> dict[str, object]:
             _toml_scalars(_require_mapping(target, "release_targets entry"))
             for target in _require_array(values["release_targets"], "release_targets")
         ],
-        "crates": [
-            _toml_scalars(_require_mapping(crate, "crates entry"))
-            for crate in _require_array(values["crates"], "crates")
-        ],
+        "crates": converted_crates,
         "release_binaries": release_binaries,
         "python_packages": [
             _toml_scalars(_require_mapping(package, "python_packages entry"))
