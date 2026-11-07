@@ -93,8 +93,10 @@ def test_shared_workflow_admission_and_finalization_order():
     tag_index = next(i for i, step in enumerate(gate) if step.get("id") == "release-ref")
     assert check_index < tag_index
     steps = release["jobs"]["release"]["steps"]
+    # Past the point of no return the finalized check reports, never fails.
     assert "--finalized" in steps[-1]["run"]
-    assert steps[-1].get("continue-on-error", False) is False
+    assert "::warning::" in steps[-1]["run"]
+    assert "if ! python3" in steps[-1]["run"]
     preflight = yaml.safe_load((root / "release-preflight.yml").read_text())["jobs"]["preflight"]["steps"]
     prerequisite = next(s for s in preflight if s.get("id") == "immutable_releases")
     assert prerequisite["env"]["GH_TOKEN"] == "${{ github.token }}"
@@ -110,3 +112,13 @@ def test_missing_or_failed_prerequisite_blocks_every_channel():
     assert _channel_preflight_result(channel, base, "v1.2.3")["status"] == "blocked"
     assert _channel_preflight_result(channel, {**base, "immutable_releases": "failure"}, "v1.2.3")["status"] == "failed"
     assert _channel_preflight_result(channel, {**base, "immutable_releases": "success"}, "v1.2.3")["status"] == "passed"
+
+
+def test_publisher_hard_gates_repository_setting_before_root_release():
+    package = INSTALL.PACKAGE_ROOT
+    agent = (package / ".claude/agents/publisher.md").read_text()
+    policy = (package / ".claude/skills/publishing/ref/release-state-strategy.md").read_text()
+    for text in (agent, policy):
+        assert "immutable-releases" in text
+        assert '"enabled": true' in text
+    assert "Point of No Return" in policy
