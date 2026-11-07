@@ -677,9 +677,16 @@ jobs:
           files: |
             ${{ env.RELEASE_ASSET_DIR }}/*
 
-      - name: Verify finalized release immutability before downstream publication
+      # The release now exists and the crates may already be live, so this is past
+      # the point of no return: a mutable result is reported, never failed. The
+      # hard gate is the publisher's pre-dispatch repository-setting check
+      # (see release-state-strategy.md), which can read the admin-only setting.
+      - name: Report finalized release immutability (non-fatal after release creation)
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ needs.gate-and-tag.outputs.release_tag }}
-        run: python3 .github/scripts/release_immutability.py --tag "$RELEASE_TAG" --finalized
+        run: |
+          if ! python3 .github/scripts/release_immutability.py --tag "$RELEASE_TAG" --finalized; then
+            echo "::warning::Release ${RELEASE_TAG} was created but does not report immutable; continuing because publication has begun."
+          fi

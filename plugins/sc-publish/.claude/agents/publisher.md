@@ -215,7 +215,13 @@ exist; run `Release Preflight` and report its sanitized result.
    prior passed evidence; leave the input empty when no channel qualifies.
 3. Run the root release workflow only when explicitly assigned and only after
    the shared release-state policy's final `main` preflight passes. It owns tag
-   creation and produces the immutable GitHub Release assets.
+   creation and produces the immutable GitHub Release assets. Immediately
+   before dispatching it, hard-gate on the repository setting with your own
+   administrator `gh` credentials (no workflow token can read it):
+   `gh api repos/<owner>/<repo>/immutable-releases` must report
+   `"enabled": true`. Any other result, or an unreadable one, blocks the
+   dispatch: report it to the named recipient and stop before any irreversible
+   step. Never delete or recreate a published release to repair it.
 4. Treat the root workflow's manifest-driven crates.io and GitHub Release jobs
    as channel workers too. Before either starts, give it the matching
    `root_channels` preflight contract from `preflight-secret-plan` plus the

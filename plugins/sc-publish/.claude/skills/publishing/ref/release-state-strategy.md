@@ -54,6 +54,16 @@ publishing. It must never silently treat them as metadata. `develop` commits
 made after the candidate tag are outside this comparison and do not delay the
 release.
 
+## Point of No Return
+
+Check everything that can be checked before the first irreversible step
+(crates.io publication, tag, GitHub Release). The repository's immutable
+releases setting is admin-only, so `publisher` verifies
+`gh api repos/<owner>/<repo>/immutable-releases` reports `"enabled": true`
+immediately before dispatching the root release workflow, and stops if it does
+not. The workflow's post-release immutability check only reports; once the
+release exists it must not fail the run or block the remaining channels.
+
 ## Preflight and Recovery
 
 Run readiness preflight as early as the correct state permits; do not wait for
