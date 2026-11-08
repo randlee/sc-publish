@@ -162,6 +162,65 @@ class InstallValuesTests(unittest.TestCase):
                 self.assertEqual(crate.get("verify_registry_visibility"), declared)
                 self.assertEqual("verify_registry_visibility" in crate, declared is not None)
 
+    def test_homebrew_test_binary_defaults_to_first_binary_when_omitted(self) -> None:
+        try:
+            import sc_compose  # noqa: F401
+        except ModuleNotFoundError:
+            self.skipTest("sc-compose bindings are not provisioned in this environment")
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            values = self.valid_values()
+            formula = values["channels"]["homebrew"]["formulas"][0]
+            formula["binaries"] = ["example", "example-extra"]
+            del formula["test_binary"]
+            source = root / "install.json"
+            source.write_text(json.dumps(values))
+            loaded = INSTALL.load_install_values(source)
+            rendered = root / "publish-artifacts.toml"
+            INSTALL.render_template(Path("release/publish-artifacts.toml.j2"), loaded, rendered)
+            manifest = tomllib.loads(rendered.read_text(encoding="utf-8"))
+        self.assertEqual(manifest["channels"]["homebrew"]["formulas"][0]["test_binary"], "example")
+
+    def test_homebrew_explicit_test_binary_is_kept_unchanged(self) -> None:
+        try:
+            import sc_compose  # noqa: F401
+        except ModuleNotFoundError:
+            self.skipTest("sc-compose bindings are not provisioned in this environment")
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            values = self.valid_values()
+            formula = values["channels"]["homebrew"]["formulas"][0]
+            formula["binaries"] = ["example", "example-extra"]
+            formula["test_binary"] = "example-extra"
+            source = root / "install.json"
+            source.write_text(json.dumps(values))
+            loaded = INSTALL.load_install_values(source)
+            rendered = root / "publish-artifacts.toml"
+            INSTALL.render_template(Path("release/publish-artifacts.toml.j2"), loaded, rendered)
+            manifest = tomllib.loads(rendered.read_text(encoding="utf-8"))
+        self.assertEqual(manifest["channels"]["homebrew"]["formulas"][0]["test_binary"], "example-extra")
+
+    def test_homebrew_empty_binaries_without_test_binary_names_test_binary(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            values = self.valid_values()
+            formula = values["channels"]["homebrew"]["formulas"][0]
+            formula["binaries"] = []
+            del formula["test_binary"]
+            source = Path(directory) / "install.json"
+            source.write_text(json.dumps(values))
+            with self.assertRaisesRegex(argparse.ArgumentTypeError, "test_binary must be a non-empty string"):
+                INSTALL.load_install_values(source)
+
+    def test_homebrew_non_string_test_binary_is_rejected(self) -> None:
+        for value in (7, None, ["example"]):
+            with self.subTest(value=value), tempfile.TemporaryDirectory() as directory:
+                values = self.valid_values()
+                values["channels"]["homebrew"]["formulas"][0]["test_binary"] = value
+                source = Path(directory) / "install.json"
+                source.write_text(json.dumps(values))
+                with self.assertRaisesRegex(Exception, r"formulas\[1\]\.test_binary must be a non-empty string"):
+                    INSTALL.load_install_values(source)
+
     def test_registry_visibility_rejects_nonboolean_install_input(self) -> None:
         for value in ("true", 1, None):
             with self.subTest(value=value), tempfile.TemporaryDirectory() as directory:

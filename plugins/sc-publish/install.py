@@ -349,13 +349,17 @@ def load_install_values(path: Path) -> dict[str, object]:
                 "path",
                 "template",
                 "class",
-                "test_binary",
                 "test_command",
                 "test_output",
                 "release_track",
             ):
                 _require_string(formula_value.get(field), f"channels.homebrew.formulas[{formula_position}].{field}")
-            _require_string_array(formula_value.get("binaries"), f"channels.homebrew.formulas[{formula_position}].binaries")
+            binaries = _require_string_array(formula_value.get("binaries"), f"channels.homebrew.formulas[{formula_position}].binaries")
+            # test_binary defaults to the first binary, so it is required only with no binaries.
+            if "test_binary" in formula_value or not binaries:
+                _require_string(
+                    formula_value.get("test_binary"), f"channels.homebrew.formulas[{formula_position}].test_binary"
+                )
         assets = _require_entries(homebrew.get("assets"), "channels.homebrew.assets", ("key", "target"))
         asset_keys = [asset["key"] for asset in assets]
         if len(asset_keys) != len(set(asset_keys)):
@@ -601,12 +605,12 @@ def template_values(values: dict[str, object]) -> dict[str, object]:
             converted.setdefault("binaries", "[]")
             converted.setdefault("binary", '""')
         if name == "homebrew":
-            converted["formulas"] = [
-                _toml_scalars(
-                    _require_mapping(formula, "channels.homebrew.formulas entry"), ("binaries",)
-                )
-                for formula in _require_array(channel["formulas"], "channels.homebrew.formulas")
-            ]
+            converted["formulas"] = []
+            for formula in _require_array(channel["formulas"], "channels.homebrew.formulas"):
+                formula_mapping = _require_mapping(formula, "channels.homebrew.formulas entry")
+                if "test_binary" not in formula_mapping:
+                    formula_mapping = {**formula_mapping, "test_binary": formula_mapping["binaries"][0]}
+                converted["formulas"].append(_toml_scalars(formula_mapping, ("binaries",)))
             converted["assets"] = [
                 _toml_scalars(_require_mapping(asset, "channels.homebrew.assets entry"))
                 for asset in _require_array(channel["assets"], "channels.homebrew.assets")
