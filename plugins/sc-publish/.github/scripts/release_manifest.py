@@ -530,6 +530,30 @@ def _validate_homebrew_formulas(
     return formulas
 
 
+def _validate_scoop_binaries(channel: dict, available_binaries: set[str]) -> None:
+    """Require exactly one of Scoop's single binary path or its list of release binaries."""
+    if ("binary" in channel) == ("binaries" in channel):
+        raise SystemExit("[channels.scoop] must define exactly one of binary or binaries")
+    if "binary" in channel:
+        if not isinstance(channel["binary"], str) or not channel["binary"]:
+            raise SystemExit("[channels.scoop].binary must be a non-empty string")
+        return
+    binaries = channel["binaries"]
+    if (
+        not isinstance(binaries, list)
+        or not binaries
+        or not all(isinstance(binary, str) and binary for binary in binaries)
+        or len(set(binaries)) != len(binaries)
+    ):
+        raise SystemExit("[channels.scoop].binaries must be a non-empty list of unique strings")
+    undeclared = sorted(set(binaries) - available_binaries)
+    if undeclared:
+        raise SystemExit(
+            "[channels.scoop].binaries references undeclared release binary(s): "
+            + ", ".join(undeclared)
+        )
+
+
 def _homebrew_formulas_for_tag(
     channel: dict, tag: str, available_binaries: set[str] | None = None
 ) -> list[dict]:

@@ -16,6 +16,7 @@ from pathlib import Path
 from threading import Thread
 
 import pytest
+from test_fail_closed_probes import extract_run_block
 
 
 # Local fixture commands should finish quickly; bound hangs on every platform.
@@ -1200,12 +1201,12 @@ def test_winget_leg_probes_before_submitting_and_pins_the_releaser() -> None:
     assert "grep -Eqi 'HTTP 404|Not Found'" in text
     assert "is indeterminate (not a confirmed 404); failing closed" in text
     assert "incomplete_results" in text
-    # The third-party releaser must be pinned to an immutable commit SHA.
-    assert (
-        "uses: vedantmgoyal2009/winget-releaser@4ffc7888bffd451b357355dc214d43bb9f23917e # v2"
-        in text
-    )
-    assert "winget-releaser@v2\n" not in text
+    # Komac is pinned by URL and sha256 (2.17+ reuses stale nested paths); the
+    # unpinned winget-releaser action must not come back.
+    assert "uses: vedantmgoyal2009/winget-releaser" not in text
+    assert "cargo binstall" not in text
+    assert "komac-2.16.0-x86_64-unknown-linux-gnu.tar.gz" in text
+    assert "7d2707fa6210f2789a3702de49fbd150b736dbf426ee0b9bc8e098736f9fd82d" in text
 
 
 def test_crates_already_published_detection_uses_exact_version_lookup() -> None:
@@ -1549,6 +1550,105 @@ def test_validate_manifest_requires_manifest_driven_scoop_channel_inputs(tmp_pat
 
     assert result.returncode != 0
     assert "[channels.scoop] missing required keys: manifest_template" in result.stderr
+
+
+def _validate_scoop_binary_setting(tmp_path: Path, setting: str) -> subprocess.CompletedProcess[str]:
+    workspace, manifest = write_repo_fixture(tmp_path, manifest_wheels=["ubuntu-latest"])
+    manifest.write_text(
+        manifest.read_text(encoding="utf-8").replace(
+            'binary = "bin/fixture"\n', setting, 1
+        ),
+        encoding="utf-8",
+    )
+    return subprocess.run(
+        [
+            sys.executable,
+            str(scripts_root() / "release_artifacts.py"),
+            "validate-manifest",
+            "--manifest",
+            str(manifest),
+            "--workspace-toml",
+            str(workspace),
+        ],
+        cwd=tmp_path,
+        text=True,
+        capture_output=True,
+        check=False,
+        timeout=TEST_COMMAND_TIMEOUT_SECONDS,
+    )
+
+
+def test_validate_manifest_accepts_scoop_binaries_list(tmp_path: Path) -> None:
+    result = _validate_scoop_binary_setting(tmp_path, 'binaries = ["fixture"]\n')
+    assert result.returncode == 0, result.stderr
+
+
+@pytest.mark.parametrize(
+    ("setting", "message"),
+    [
+        ('binary = "bin/fixture"\nbinaries = ["fixture"]\n', "exactly one of binary or binaries"),
+        ("", "exactly one of binary or binaries"),
+        ("binaries = []\n", "non-empty list of unique strings"),
+        ('binaries = ["fixture", "fixture"]\n', "non-empty list of unique strings"),
+        ('binaries = ["undeclared"]\n', "undeclared release binary(s): undeclared"),
+    ],
+)
+def test_validate_manifest_rejects_invalid_scoop_binaries(
+    tmp_path: Path, setting: str, message: str
+) -> None:
+    result = _validate_scoop_binary_setting(tmp_path, setting)
+    assert result.returncode != 0
+    assert message in result.stderr
+
+
+def _scoop_render_variables(tmp_path: Path, channel: dict[str, object]) -> dict[str, object]:
+    """Run the workflow's variable step with curl stubbed; return its render variables."""
+    script = extract_run_block(
+        scoop_publish_workflow_text(), "name: Prepare checked-render variables"
+    )
+    stub_bin = tmp_path / "stub-bin"
+    stub_bin.mkdir()
+    curl = stub_bin / "curl"
+    curl.write_text(
+        '#!/usr/bin/env bash\nwhile [ "$1" != "-o" ]; do shift; done\nprintf archive > "$2"\n',
+        encoding="utf-8",
+    )
+    curl.chmod(0o755)
+    config = {
+        "project": {
+            "archive_prefix": "example",
+            "description": "d",
+            "homepage": "https://example.invalid",
+            "license": "MIT",
+        },
+        "channel": {"installer_target": "windows", **channel},
+        "release_targets": {"windows": {"target": "x86_64-pc-windows-msvc", "archive": "zip"}},
+    }
+    subprocess.run(
+        ["bash", "-c", script],
+        cwd=tmp_path,
+        env={
+            "PATH": f"{stub_bin}{os.pathsep}{os.environ['PATH']}",
+            "CHANNEL_CONFIG": json.dumps(config),
+            "RELEASE_REPOSITORY": "example/example",
+            "RELEASE_TAG": "v1.2.3",
+            "RELEASE_VERSION": "1.2.3",
+            "RUNNER_TEMP": str(tmp_path),
+        },
+        check=True,
+        timeout=TEST_COMMAND_TIMEOUT_SECONDS,
+    )
+    return json.loads((tmp_path / "scoop-vars.json").read_text(encoding="utf-8"))
+
+
+def test_scoop_workflow_renders_one_shim_per_listed_binary(tmp_path: Path) -> None:
+    variables = _scoop_render_variables(tmp_path, {"binaries": ["example", "example-helper"]})
+    assert variables["binary"] == ["bin/example.exe", "bin/example-helper.exe"]
+
+
+def test_scoop_workflow_keeps_single_binary_string_without_opt_in(tmp_path: Path) -> None:
+    variables = _scoop_render_variables(tmp_path, {"binary": "custom/path/example.exe"})
+    assert variables["binary"] == "custom/path/example.exe"
 
 
 def test_validate_manifest_rejects_unknown_renderer_target(tmp_path: Path) -> None:
@@ -2828,6 +2928,26 @@ def test_release_channel_templates_render_to_valid_ruby_and_json(tmp_path: Path)
     manifest = json.loads(scoop)
     assert manifest["description"] == 'Quoted "description"'
     assert manifest["architecture"]["64bit"]["bin"] == "bin/sc-compose.exe"
+    assert '"bin": "bin/sc-compose.exe"' in scoop
+
+    multiple = render_release_template(
+        tmp_path,
+        "release/scoop/manifest.json.j2",
+        {
+            "version": "1.4.2",
+            "description": "d",
+            "homepage": "https://github.com/randlee/sc-compose",
+            "license": "MIT",
+            "windows_url": "https://example.invalid/windows.zip",
+            "windows_sha256": "d" * 64,
+            "extract_dir": "sc-compose_1.4.2_x86_64-pc-windows-msvc",
+            "binary": ["bin/sc-compose.exe", "bin/sc-compose-daemon.exe"],
+        },
+    )
+    assert json.loads(multiple)["architecture"]["64bit"]["bin"] == [
+        "bin/sc-compose.exe",
+        "bin/sc-compose-daemon.exe",
+    ]
 
 
 def test_homebrew_formula_tracks_and_binaries_are_documented() -> None:
