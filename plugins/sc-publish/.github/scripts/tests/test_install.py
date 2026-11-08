@@ -360,6 +360,61 @@ class InstallValuesTests(unittest.TestCase):
                 with self.assertRaisesRegex(argparse.ArgumentTypeError, re.escape(message)):
                     INSTALL.load_install_values(path)
 
+    def render_winget_table(self, values: dict[str, object]) -> str:
+        """Return the rendered [channels.winget] table text, up to its closing field."""
+        try:
+            import sc_compose  # noqa: F401
+        except ModuleNotFoundError:
+            self.skipTest("sc-compose bindings are not provisioned in this environment")
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "input.json"
+            path.write_text(json.dumps(values), encoding="utf-8")
+            loaded = INSTALL.load_install_values(path)
+            output = Path(directory) / "publish-artifacts.toml"
+            INSTALL.render_template(
+                INSTALL.PACKAGE_ROOT / "release" / "publish-artifacts.toml.j2",
+                loaded,
+                output,
+            )
+            rendered = output.read_text(encoding="utf-8")
+        match = re.search(
+            r"\[channels\.winget\]\n.*?\ninstaller_target = [^\n]*(\nfork_user = [^\n]*)?",
+            rendered,
+            re.DOTALL,
+        )
+        assert match is not None
+        return match.group(0)
+
+    def test_winget_table_without_fork_user_is_byte_identical(self) -> None:
+        self.assertEqual(
+            self.render_winget_table(self.valid_values()),
+            "[channels.winget]\n"
+            'workflow = "winget-publish.yml"\n'
+            "dispatch_inputs = {  }\n"
+            'identifier = "example.example"\n'
+            'installer_target = "x86_64-pc-windows-msvc"',
+        )
+
+    def test_winget_fork_user_round_trips(self) -> None:
+        values = self.valid_values()
+        values["channels"]["winget"]["fork_user"] = "fork-owner"
+        self.assertTrue(
+            self.render_winget_table(values).endswith('\nfork_user = "fork-owner"')
+        )
+
+    def test_winget_rejects_invalid_fork_user(self) -> None:
+        for bad in ("", 7, None, ["fork-owner"]):
+            with self.subTest(fork_user=bad), tempfile.TemporaryDirectory() as directory:
+                values = self.valid_values()
+                values["channels"]["winget"]["fork_user"] = bad
+                path = Path(directory) / "input.json"
+                path.write_text(json.dumps(values), encoding="utf-8")
+                with self.assertRaisesRegex(
+                    argparse.ArgumentTypeError,
+                    re.escape("channels.winget.fork_user must be a non-empty string"),
+                ):
+                    INSTALL.load_install_values(path)
+
     def test_render_omits_undeclared_channel_tables(self) -> None:
         try:
             import sc_compose  # noqa: F401

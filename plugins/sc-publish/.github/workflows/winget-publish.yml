@@ -112,3 +112,5 @@ jobs:
           # Must authorize a fork of microsoft/winget-pkgs; the repository
           # GITHUB_TOKEN is intentionally not used for this external channel.
           token: ${{ secrets.WINGET_GITHUB_TOKEN }}
+          # Optional channels.winget.fork_user names the winget-pkgs fork owner.
+          fork-user: ${{ fromJSON(needs.verify-release.outputs.channel_config).channel.fork_user || github.repository_owner }}

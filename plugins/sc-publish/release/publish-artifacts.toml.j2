@@ -57,6 +57,8 @@ required_variables:
   - channels.winget.dispatch_inputs
   - channels.winget.identifier
   - channels.winget.installer_target
+  - channels.winget.fork_user
+  - channels.winget.has_fork_user
   - has_readme_dependency_crate
   - has_renderer_archive_path
   - has_workspace_toml
@@ -197,6 +199,9 @@ workflow = {{ channels.winget.workflow }}
 dispatch_inputs = {{ channels.winget.dispatch_inputs }}
 identifier = {{ channels.winget.identifier }}
 installer_target = {{ channels.winget.installer_target }}
+{% if channels.winget.has_fork_user %}
+fork_user = {{ channels.winget.fork_user }}
+{% endif %}
 {% endif %}
 
 {% if has_channel_scoop %}

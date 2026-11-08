@@ -554,6 +554,14 @@ def _validate_scoop_binaries(channel: dict, available_binaries: set[str]) -> Non
         )
 
 
+def _validate_winget_fork_user(channel: dict) -> None:
+    """Reject an empty or non-string optional fork_user."""
+    if "fork_user" in channel and (
+        not isinstance(channel["fork_user"], str) or not channel["fork_user"]
+    ):
+        raise SystemExit("[channels.winget].fork_user must be a non-empty string")
+
+
 def _homebrew_formulas_for_tag(
     channel: dict, tag: str, available_binaries: set[str] | None = None
 ) -> list[dict]:

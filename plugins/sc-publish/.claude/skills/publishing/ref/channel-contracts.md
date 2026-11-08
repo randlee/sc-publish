@@ -86,7 +86,8 @@ For vendor compatibility, a legacy single `binary` normalizes to a one-entry
 
 Use the contract-declared GitHub token liveness check before dispatching the
 manifest-declared workflow. The manifest owns the package identifier and
-installer target.
+installer target. An optional `fork_user` names the account that owns the
+`winget-pkgs` fork when it is not the repository owner.
 
 ## Scoop — `scoop-publisher`
 

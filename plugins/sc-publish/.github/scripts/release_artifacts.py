@@ -24,6 +24,7 @@ from release_manifest import (
     _public_registry_checks,
     _validate_homebrew_formulas,
     _validate_scoop_binaries,
+    _validate_winget_fork_user,
     _python_distribution_entries,
     _python_distribution_expectations,
     _python_project_name,
@@ -346,6 +347,8 @@ def cmd_validate_manifest(args: argparse.Namespace) -> int:
             _channel_config(manifest, "homebrew"),
             {binary["name"] for binary in binaries},
         )
+    if "winget" in channel_names:
+        _validate_winget_fork_user(_channel_config(manifest, "winget"))
     if "scoop" in channel_names:
         _validate_scoop_channel(manifest)
     seen = set()

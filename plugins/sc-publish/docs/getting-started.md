@@ -258,7 +258,7 @@ One channel covers both. The `testpypi` release target uploads to TestPyPI as a 
 
 - **Templates:** none. `winget-publish.yml` derives the new manifest from the previous winget-pkgs version.
 - **Setup:**
-  - Fork `microsoft/winget-pkgs` into the account that owns this repository.
+  - Fork `microsoft/winget-pkgs` into the account that owns this repository. If the fork lives under a different account, for example when an organization owns the repository, set `"fork_user": "fork-owner"` in `channels.winget`.
   - Submit the first version by hand, for example with `wingetcreate new`, and wait for it to merge. The workflow only updates an existing package.
   - Add repository secret `WINGET_GITHUB_TOKEN`: a classic token with `public_repo` scope from the fork owner.
 - **Confirm:** a pull request for `Example.Example 0.1.0` opens on `microsoft/winget-pkgs`. After it merges, `winget install Example.Example`.

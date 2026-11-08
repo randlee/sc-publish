@@ -87,6 +87,8 @@ CHANNEL_TEMPLATE_SENTINELS: dict[str, dict[str, Any]] = {
         "dispatch_inputs": {},
         "identifier": "",
         "installer_target": "",
+        "fork_user": "",
+        "has_fork_user": False,
     },
     "scoop": {
         "workflow": "",
@@ -380,6 +382,8 @@ def load_install_values(path: Path) -> dict[str, object]:
         channel = _require_mapping(channels[name], f"channels.{name}")
         for field in fields:
             _require_string(channel.get(field), f"channels.{name}.{field}")
+    if "fork_user" in channels.get("winget", {}):
+        _require_string(channels["winget"]["fork_user"], "channels.winget.fork_user")
     if "scoop" in channels:
         scoop = _require_mapping(channels["scoop"], "channels.scoop")
         if ("binary" in scoop) == ("binaries" in scoop):
@@ -596,6 +600,9 @@ def template_values(values: dict[str, object]) -> dict[str, object]:
             channel,
             ("dispatch_inputs", "credential_rehearsal_inputs", "binaries"),
         )
+        if name == "winget":
+            converted["has_fork_user"] = "fork_user" in channel
+            converted.setdefault("fork_user", '""')
         if name == "scoop":
             converted["has_binaries"] = "binaries" in channel
             converted.setdefault("binaries", "[]")

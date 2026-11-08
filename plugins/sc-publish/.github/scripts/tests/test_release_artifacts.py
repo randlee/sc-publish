@@ -1209,6 +1209,37 @@ def test_winget_leg_probes_before_submitting_and_pins_the_releaser() -> None:
     assert "winget-releaser@v2\n" not in text
 
 
+def test_winget_fork_user_is_optional_and_falls_back_to_repository_owner() -> None:
+    text = winget_publish_workflow_text()
+    assert (
+        "fork-user: ${{ fromJSON(needs.verify-release.outputs.channel_config).channel.fork_user"
+        " || github.repository_owner }}"
+    ) in text
+
+
+def _validate_winget_fork_user(tmp_path: Path, setting: str) -> subprocess.CompletedProcess[str]:
+    workspace, manifest = write_repo_fixture(tmp_path, manifest_wheels=["ubuntu-latest"])
+    anchor = 'identifier = "example.fixture"\n'
+    text = manifest.read_text(encoding="utf-8")
+    assert anchor in text
+    manifest.write_text(text.replace(anchor, anchor + setting, 1), encoding="utf-8")
+    return run_fixture_command(
+        tmp_path, "validate-manifest", "--workspace-toml", str(workspace), manifest=manifest
+    )
+
+
+def test_validate_manifest_accepts_winget_fork_user(tmp_path: Path) -> None:
+    result = _validate_winget_fork_user(tmp_path, 'fork_user = "fork-owner"\n')
+    assert result.returncode == 0, result.stderr
+
+
+@pytest.mark.parametrize("setting", ['fork_user = ""\n', "fork_user = 7\n", 'fork_user = ["a"]\n'])
+def test_validate_manifest_rejects_invalid_winget_fork_user(tmp_path: Path, setting: str) -> None:
+    result = _validate_winget_fork_user(tmp_path, setting)
+    assert result.returncode != 0
+    assert "[channels.winget].fork_user must be a non-empty string" in result.stderr
+
+
 def test_crates_already_published_detection_uses_exact_version_lookup() -> None:
     release_text = release_workflow_text()
     crates_text = crates_publish_workflow_text()
