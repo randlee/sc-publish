@@ -347,12 +347,15 @@ def load_install_values(path: Path) -> dict[str, object]:
                 "path",
                 "template",
                 "class",
-                "test_binary",
                 "test_command",
                 "test_output",
                 "release_track",
             ):
                 _require_string(formula_value.get(field), f"channels.homebrew.formulas[{formula_position}].{field}")
+            if "test_binary" in formula_value:
+                _require_string(
+                    formula_value["test_binary"], f"channels.homebrew.formulas[{formula_position}].test_binary"
+                )
             _require_string_array(formula_value.get("binaries"), f"channels.homebrew.formulas[{formula_position}].binaries")
         assets = _require_entries(homebrew.get("assets"), "channels.homebrew.assets", ("key", "target"))
         asset_keys = [asset["key"] for asset in assets]
@@ -577,12 +580,15 @@ def template_values(values: dict[str, object]) -> dict[str, object]:
             ("dispatch_inputs", "credential_rehearsal_inputs"),
         )
         if name == "homebrew":
-            converted["formulas"] = [
-                _toml_scalars(
-                    _require_mapping(formula, "channels.homebrew.formulas entry"), ("binaries",)
+            converted["formulas"] = []
+            for formula in _require_array(channel["formulas"], "channels.homebrew.formulas"):
+                formula_mapping = _require_mapping(formula, "channels.homebrew.formulas entry")
+                # test_binary is optional and documented to default to the first binary.
+                binaries = _require_array(formula_mapping.get("binaries"), "channels.homebrew.formulas binaries")
+                formula_defaults = {"test_binary": binaries[0]} if binaries and "test_binary" not in formula_mapping else {}
+                converted["formulas"].append(
+                    _toml_scalars({**formula_defaults, **formula_mapping}, ("binaries",))
                 )
-                for formula in _require_array(channel["formulas"], "channels.homebrew.formulas")
-            ]
             converted["assets"] = [
                 _toml_scalars(_require_mapping(asset, "channels.homebrew.assets entry"))
                 for asset in _require_array(channel["assets"], "channels.homebrew.assets")
