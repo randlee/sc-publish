@@ -200,6 +200,17 @@ class InstallValuesTests(unittest.TestCase):
             manifest = tomllib.loads(rendered.read_text(encoding="utf-8"))
         self.assertEqual(manifest["channels"]["homebrew"]["formulas"][0]["test_binary"], "example-extra")
 
+    def test_homebrew_empty_binaries_without_test_binary_names_test_binary(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            values = self.valid_values()
+            formula = values["channels"]["homebrew"]["formulas"][0]
+            formula["binaries"] = []
+            del formula["test_binary"]
+            source = Path(directory) / "install.json"
+            source.write_text(json.dumps(values))
+            with self.assertRaisesRegex(argparse.ArgumentTypeError, "test_binary must be a non-empty string"):
+                INSTALL.load_install_values(source)
+
     def test_homebrew_non_string_test_binary_is_rejected(self) -> None:
         for value in (7, None, ["example"]):
             with self.subTest(value=value), tempfile.TemporaryDirectory() as directory:
