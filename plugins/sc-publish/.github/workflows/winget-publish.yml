@@ -110,23 +110,6 @@ jobs:
       # Komac 2.16.0 re-resolves the path from the new installer, so it is
       # pinned here by URL and sha256. Move the pin only after a newer Komac
       # is shown to resolve nested paths against the new archive.
-      - name: Require an existing winget-pkgs package
-        if: ${{ steps.winget_probe.outputs.already_published != 'true' }}
-        shell: bash
-        env:
-          GH_TOKEN: ${{ github.token }}
-          IDENTIFIER: ${{ fromJSON(needs.verify-release.outputs.channel_config).channel.identifier }}
-        run: |
-          set -euo pipefail
-          first_letter="$(tr '[:upper:]' '[:lower:]' <<<"${IDENTIFIER:0:1}")"
-          package_path="manifests/${first_letter}/${IDENTIFIER//.//}"
-          probe_stderr="$(mktemp)"
-          if ! gh api "repos/microsoft/winget-pkgs/contents/${package_path}" >/dev/null 2>"${probe_stderr}"; then
-            cat "${probe_stderr}" >&2
-            echo "::error::Package ${IDENTIFIER} does not exist in the winget-pkgs repository (or the lookup failed). Hand-submit the first version to winget-pkgs before using this channel."
-            exit 1
-          fi
-
       - name: Install Komac 2.16.0 (pinned, sha256-verified)
         if: ${{ steps.winget_probe.outputs.already_published != 'true' }}
         shell: bash
@@ -152,8 +135,6 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.WINGET_GITHUB_TOKEN }}
           GH_TOKEN: ${{ github.token }}
           KOMAC_FORK_OWNER: ${{ github.repository_owner }}
-          KOMAC_CREATED_WITH: sc-publish winget-publish
-          KOMAC_CREATED_WITH_URL: ${{ github.server_url }}/${{ github.repository }}
           IDENTIFIER: ${{ fromJSON(needs.verify-release.outputs.channel_config).channel.identifier }}
           ASSET_PATTERN: ${{ fromJSON(needs.verify-release.outputs.channel_config).asset_patterns[0] }}
           RELEASE_TAG: ${{ inputs.tag }}

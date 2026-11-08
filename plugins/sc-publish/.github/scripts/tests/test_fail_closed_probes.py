@@ -448,7 +448,7 @@ def run_winget_publish(tmp_path: Path, *, release_json: str = RELEASE_ASSETS_JSO
     write_stub(
         bin_dir,
         "komac",
-        f'{{ printf "KOMAC_FORK_OWNER=%s CREATED_WITH=%s TOKEN=%s\\n" "$KOMAC_FORK_OWNER" "$KOMAC_CREATED_WITH" "$GITHUB_TOKEN"; '
+        f'{{ printf "KOMAC_FORK_OWNER=%s TOKEN=%s\\n" "$KOMAC_FORK_OWNER" "$GITHUB_TOKEN"; '
         f'printf "ARGS:"; for a in "$@"; do printf "[%s]" "$a"; done; echo; }} >> "{log}"\n',
     )
     result = run_bash(
@@ -458,7 +458,6 @@ def run_winget_publish(tmp_path: Path, *, release_json: str = RELEASE_ASSETS_JSO
             "GITHUB_TOKEN": "winget-token",
             "GH_TOKEN": "gh-token",
             "KOMAC_FORK_OWNER": "example-owner",
-            "KOMAC_CREATED_WITH": "sc-publish winget-publish",
             "IDENTIFIER": "Example.Wyvern",
             "ASSET_PATTERN": "^wyvern_.*_x86_64\\-pc\\-windows\\-msvc\\.zip$",
             "RELEASE_TAG": "v0.8.0",
@@ -473,9 +472,9 @@ def test_winget_publish_runs_exact_komac_update_and_cleanup(tmp_path: Path) -> N
     assert result.returncode == 0, result.stderr
     lines = log.read_text(encoding="utf-8").splitlines()
     assert lines == [
-        "KOMAC_FORK_OWNER=example-owner CREATED_WITH=sc-publish winget-publish TOKEN=winget-token",
+        "KOMAC_FORK_OWNER=example-owner TOKEN=winget-token",
         "ARGS:[update][Example.Wyvern][--version][0.8.0][--submit][--urls][https://dl/win.zip]",
-        "KOMAC_FORK_OWNER=example-owner CREATED_WITH=sc-publish winget-publish TOKEN=winget-token",
+        "KOMAC_FORK_OWNER=example-owner TOKEN=winget-token",
         "ARGS:[cleanup][--only-merged]",
     ]
 
