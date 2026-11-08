@@ -260,6 +260,7 @@ One channel covers both. The `testpypi` release target uploads to TestPyPI as a 
 - **Setup:**
   - Fork `microsoft/winget-pkgs` into the account that owns this repository.
   - Submit the first version by hand, for example with `wingetcreate new`, and wait for it to merge. The workflow only updates an existing package.
+  - In the hand-submitted first version, set `NestedInstallerType: portable` and give `NestedInstallerFiles` one entry per binary to put on PATH, each with a `PortableCommandAlias`. Later updates keep exactly that list, so adding a binary later takes a manual edit to winget-pkgs.
   - Add repository secret `WINGET_GITHUB_TOKEN`: a classic token with `public_repo` scope from the fork owner.
 - **Confirm:** a pull request for `Example.Example 0.1.0` opens on `microsoft/winget-pkgs`. After it merges, `winget install Example.Example`.
 

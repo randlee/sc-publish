@@ -1201,12 +1201,12 @@ def test_winget_leg_probes_before_submitting_and_pins_the_releaser() -> None:
     assert "grep -Eqi 'HTTP 404|Not Found'" in text
     assert "is indeterminate (not a confirmed 404); failing closed" in text
     assert "incomplete_results" in text
-    # The third-party releaser must be pinned to an immutable commit SHA.
-    assert (
-        "uses: vedantmgoyal2009/winget-releaser@4ffc7888bffd451b357355dc214d43bb9f23917e # v2"
-        in text
-    )
-    assert "winget-releaser@v2\n" not in text
+    # Komac is pinned by URL and sha256 (2.17+ reuses stale nested paths); the
+    # unpinned winget-releaser action must not come back.
+    assert "uses: vedantmgoyal2009/winget-releaser" not in text
+    assert "cargo binstall" not in text
+    assert "komac-2.16.0-x86_64-unknown-linux-gnu.tar.gz" in text
+    assert "7d2707fa6210f2789a3702de49fbd150b736dbf426ee0b9bc8e098736f9fd82d" in text
 
 
 def test_crates_already_published_detection_uses_exact_version_lookup() -> None:
