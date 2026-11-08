@@ -218,7 +218,7 @@ Explicit Linux wheels reuse maturin's Zig support with the selected manylinux
 compatibility. macOS objects require `deployment_target` (for example `10.13`
 with `x86_64-apple-darwin` / `macosx_10_13_x86_64`, or `11.0` with
 `aarch64-apple-darwin` / `macosx_11_0_arm64`). Windows uses
-`x86_64-pc-windows-msvc` / `win_amd64`. Explicit platform objects require maturin;
+`x86_64-pc-windows-msvc` / `win_amd64` or `aarch64-pc-windows-msvc` / `win_arm64`. Explicit platform objects require maturin;
 setuptools keeps the existing runner strings. Build output and collected release
 assets must match every declared platform exactly once.
 
