@@ -23,6 +23,7 @@ from release_manifest import (
     _homebrew_formulas_for_tag,
     _public_registry_checks,
     _validate_homebrew_formulas,
+    _validate_scoop_binaries,
     _python_distribution_entries,
     _python_distribution_expectations,
     _python_project_name,
@@ -273,12 +274,13 @@ def _validate_scoop_channel(manifest: dict) -> None:
     channel = _channel_config(manifest, "scoop")
     _require_keys(
         channel,
-        ("bucket_repository", "manifest_path", "manifest_template", "binary"),
+        ("bucket_repository", "manifest_path", "manifest_template"),
         "[channels.scoop]",
     )
-    for key in ("bucket_repository", "manifest_path", "manifest_template", "binary"):
+    for key in ("bucket_repository", "manifest_path", "manifest_template"):
         if not isinstance(channel[key], str) or not channel[key]:
             raise SystemExit(f"[channels.scoop].{key} must be a non-empty string")
+    _validate_scoop_binaries(channel, {binary["name"] for binary in _release_binaries(manifest)})
 
 
 def _channel_asset_patterns(manifest: dict, channel_name: str) -> list[str]:

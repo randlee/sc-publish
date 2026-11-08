@@ -96,6 +96,8 @@ CHANNEL_TEMPLATE_SENTINELS: dict[str, dict[str, Any]] = {
         "manifest_template": "",
         "installer_target": "",
         "binary": "",
+        "binaries": [],
+        "has_binaries": False,
         "renderer_target": "",
     },
 }
@@ -370,7 +372,6 @@ def load_install_values(path: Path) -> dict[str, object]:
             "manifest_path",
             "manifest_template",
             "installer_target",
-            "binary",
             "renderer_target",
         ),
     }.items():
@@ -379,6 +380,25 @@ def load_install_values(path: Path) -> dict[str, object]:
         channel = _require_mapping(channels[name], f"channels.{name}")
         for field in fields:
             _require_string(channel.get(field), f"channels.{name}.{field}")
+    if "scoop" in channels:
+        scoop = _require_mapping(channels["scoop"], "channels.scoop")
+        if ("binary" in scoop) == ("binaries" in scoop):
+            raise argparse.ArgumentTypeError(
+                "channels.scoop must define exactly one of binary or binaries"
+            )
+        if "binary" in scoop:
+            _require_string(scoop["binary"], "channels.scoop.binary")
+        else:
+            scoop_binaries = _require_string_array(scoop["binaries"], "channels.scoop.binaries")
+            if not scoop_binaries or len(set(scoop_binaries)) != len(scoop_binaries):
+                raise argparse.ArgumentTypeError(
+                    "channels.scoop.binaries must be a non-empty list without duplicates"
+                )
+            undeclared = sorted(set(scoop_binaries) - {binary["name"] for binary in release_binaries})
+            if undeclared:
+                raise argparse.ArgumentTypeError(
+                    f"channels.scoop.binaries references undeclared release binary(s): {', '.join(undeclared)}"
+                )
 
     if "homebrew" in channels or "scoop" in channels:
         _require_string(project.get("renderer_archive_path"), "project.renderer_archive_path")
@@ -568,14 +588,18 @@ def template_values(values: dict[str, object]) -> dict[str, object]:
         if name not in channels:
             converted_channels[name] = _toml_scalars(
                 dict(CHANNEL_TEMPLATE_SENTINELS[name]),
-                ("dispatch_inputs", "credential_rehearsal_inputs"),
+                ("dispatch_inputs", "credential_rehearsal_inputs", "binaries"),
             )
             continue
         channel = _require_mapping(channels[name], f"channels.{name}")
         converted = _toml_scalars(
             channel,
-            ("dispatch_inputs", "credential_rehearsal_inputs"),
+            ("dispatch_inputs", "credential_rehearsal_inputs", "binaries"),
         )
+        if name == "scoop":
+            converted["has_binaries"] = "binaries" in channel
+            converted.setdefault("binaries", "[]")
+            converted.setdefault("binary", '""')
         if name == "homebrew":
             converted["formulas"] = [
                 _toml_scalars(

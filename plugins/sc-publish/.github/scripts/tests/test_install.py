@@ -299,6 +299,67 @@ class InstallValuesTests(unittest.TestCase):
             with self.assertRaisesRegex(Exception, "unsupported name"):
                 INSTALL.load_install_values(path)
 
+    def render_scoop_table(self, values: dict[str, object]) -> str:
+        """Return the rendered [channels.scoop] table text, up to its closing field."""
+        try:
+            import sc_compose  # noqa: F401
+        except ModuleNotFoundError:
+            self.skipTest("sc-compose bindings are not provisioned in this environment")
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "input.json"
+            path.write_text(json.dumps(values), encoding="utf-8")
+            loaded = INSTALL.load_install_values(path)
+            output = Path(directory) / "publish-artifacts.toml"
+            INSTALL.render_template(
+                INSTALL.PACKAGE_ROOT / "release" / "publish-artifacts.toml.j2",
+                loaded,
+                output,
+            )
+            rendered = output.read_text(encoding="utf-8")
+        match = re.search(r"\[channels\.scoop\]\n.*?\nrenderer_target = [^\n]*", rendered, re.DOTALL)
+        assert match is not None
+        return match.group(0)
+
+    def test_scoop_table_without_opt_in_is_byte_identical(self) -> None:
+        self.assertEqual(
+            self.render_scoop_table(self.valid_values()),
+            "[channels.scoop]\n"
+            'workflow = "scoop-publish.yml"\n'
+            "dispatch_inputs = {  }\n"
+            'bucket_repository = "example/scoop-bucket"\n'
+            'manifest_path = "bucket/example.json"\n'
+            'manifest_template = "release/scoop/manifest.json.j2"\n'
+            'installer_target = "x86_64-pc-windows-msvc"\n'
+            'binary = "bin/example.exe"\n'
+            'renderer_target = "x86_64-unknown-linux-gnu"',
+        )
+
+    def test_scoop_binaries_list_renders_in_place_of_binary(self) -> None:
+        values = self.valid_values()
+        del values["channels"]["scoop"]["binary"]
+        values["channels"]["scoop"]["binaries"] = ["example"]
+        table = self.render_scoop_table(values)
+        self.assertIn('binaries = ["example"]\n', table)
+        self.assertNotIn("binary =", table)
+
+    def test_scoop_rejects_invalid_binary_settings(self) -> None:
+        cases = (
+            ({"binary": "bin/example.exe", "binaries": ["example"]}, "exactly one of"),
+            ({}, "exactly one of"),
+            ({"binaries": []}, "non-empty list"),
+            ({"binaries": ["example", "example"]}, "non-empty list"),
+            ({"binaries": ["undeclared"]}, "undeclared release binary(s): undeclared"),
+        )
+        for setting, message in cases:
+            with self.subTest(setting=setting), tempfile.TemporaryDirectory() as directory:
+                values = self.valid_values()
+                del values["channels"]["scoop"]["binary"]
+                values["channels"]["scoop"].update(setting)
+                path = Path(directory) / "input.json"
+                path.write_text(json.dumps(values), encoding="utf-8")
+                with self.assertRaisesRegex(argparse.ArgumentTypeError, re.escape(message)):
+                    INSTALL.load_install_values(path)
+
     def test_render_omits_undeclared_channel_tables(self) -> None:
         try:
             import sc_compose  # noqa: F401

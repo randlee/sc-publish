@@ -50,6 +50,8 @@ required_variables:
   - channels.scoop.manifest_template
   - channels.scoop.installer_target
   - channels.scoop.binary
+  - channels.scoop.binaries
+  - channels.scoop.has_binaries
   - channels.scoop.renderer_target
   - channels.winget.workflow
   - channels.winget.dispatch_inputs
@@ -205,7 +207,11 @@ bucket_repository = {{ channels.scoop.bucket_repository }}
 manifest_path = {{ channels.scoop.manifest_path }}
 manifest_template = {{ channels.scoop.manifest_template }}
 installer_target = {{ channels.scoop.installer_target }}
+{% if channels.scoop.has_binaries %}
+binaries = {{ channels.scoop.binaries }}
+{% else %}
 binary = {{ channels.scoop.binary }}
+{% endif %}
 renderer_target = {{ channels.scoop.renderer_target }}
 {% endif %}
 
