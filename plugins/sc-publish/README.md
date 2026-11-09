@@ -218,9 +218,12 @@ Explicit Linux wheels reuse maturin's Zig support with the selected manylinux
 compatibility. macOS objects require `deployment_target` (for example `10.13`
 with `x86_64-apple-darwin` / `macosx_10_13_x86_64`, or `11.0` with
 `aarch64-apple-darwin` / `macosx_11_0_arm64`). Windows uses
-`x86_64-pc-windows-msvc` / `win_amd64`. Explicit platform objects require maturin;
-setuptools keeps the existing runner strings. Build output and collected release
-assets must match every declared platform exactly once.
+`x86_64-pc-windows-msvc` / `win_amd64` or `aarch64-pc-windows-msvc` /
+`win_arm64`. A legacy runner string such as `"windows-11-arm"` mixed with
+explicit wheels still declares no platform, so use the explicit form. Explicit
+platform objects require maturin; setuptools keeps the existing runner strings.
+Build output and collected release assets must match every declared platform
+exactly once.
 
 Crates with their own `[workspace]` may appear in `crates` using an explicit
 `cargo_toml`; their version must equal the release workspace version. Both
