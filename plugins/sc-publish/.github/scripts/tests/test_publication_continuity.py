@@ -295,28 +295,20 @@ def test_other_channel_inventory_uses_declared_providers(status, expected):
                          "repos/microsoft/winget-pkgs/contents/manifests/v/Vendor/Tool"]
 
 
-def test_real_previous_release_fixture_preserves_assets_and_all_published_channels():
+def test_previous_release_fixture_preserves_assets_and_all_published_channels():
     fixtures = Path(__file__).parent / "fixtures/continuity"
-    values = tomllib.loads((fixtures / "v1.8.0-manifest.toml").read_text())
-    # Current plan pins the legacy macOS alias to its declared native runner.
-    for distribution in values["python_distributions"]:
-        distribution["wheels"] = ["macos-15" if runner == "macos-latest" else runner
-                                  for runner in distribution["wheels"]]
+    values = tomllib.loads((fixtures / "previous-manifest.toml").read_text())
     values["publication_continuity"] = {}
-    old = json.loads((fixtures / "v1.8.0-inventory.json").read_text())
+    old = json.loads((fixtures / "previous-inventory.json").read_text())
     assert check(values, old)["status"] == "pass"
-    values["crates"] = [row for row in values["crates"] if row["package"] != "sc-sha"]
-    with pytest.raises(ContinuityError, match="crate:sc-sha"):
+    values["crates"] = [row for row in values["crates"] if row["package"] != "example-core"]
+    with pytest.raises(ContinuityError, match="crate:example-core"):
         check(values, old)
 
 
 def test_wheel_npm_and_go_asset_patterns_require_the_declared_platforms():
     fixtures = Path(__file__).parent / "fixtures/continuity"
-    values = tomllib.loads((fixtures / "v1.8.0-manifest.toml").read_text())
-    # Current plan pins the legacy macOS alias to its declared native runner.
-    for distribution in values["python_distributions"]:
-        distribution["wheels"] = ["macos-15" if runner == "macos-latest" else runner
-                                  for runner in distribution["wheels"]]
+    values = tomllib.loads((fixtures / "previous-manifest.toml").read_text())
     values["npm_packages"] = [{"name": "@team/tool"}]
     values["go_modules"] = [{"module": "example.test/tool", "artifact_prefix": "binding",
                               "targets": [{"target": "aarch64-apple-darwin"}]}]
@@ -325,10 +317,10 @@ def test_wheel_npm_and_go_asset_patterns_require_the_declared_platforms():
     assert matches("team-tool-1.9.0.tgz")
     assert matches("binding-aarch64-apple-darwin.zip")
     assert not matches("binding-x86_64-apple-darwin.zip")
-    assert matches("sc_sha-1.9.0-cp39-abi3-win_arm64.whl")
-    assert not matches("sc_sha-1.9.0-cp39-abi3-win32.whl")
-    values["release_targets"] = []
-    with pytest.raises(ContinuityError, match="unambiguous"):
+    assert matches("example_python-1.9.0-cp39-abi3-macosx_11_0_arm64.whl")
+    assert not matches("example_python-1.9.0-cp39-abi3-win32.whl")
+    values["python_distributions"][0]["wheels"] = ["macos-latest"]
+    with pytest.raises(ContinuityError, match="continuity requires explicit platform wheel declarations"):
         planned_asset_patterns(values)
 
 
@@ -364,3 +356,33 @@ def test_explicit_wheel_platform_is_exact():
     patterns = planned_asset_patterns(values)
     assert any(pattern.fullmatch("native_tool-1.3.0-cp39-abi3-win_arm64.whl") for pattern in patterns)
     assert not any(pattern.fullmatch("native_tool-1.3.0-cp39-abi3-win_amd64.whl") for pattern in patterns)
+
+
+def test_changed_wheel_platform_is_a_drop():
+    fixtures = Path(__file__).parent / "fixtures/continuity"
+    values = tomllib.loads((fixtures / "previous-manifest.toml").read_text())
+    values["publication_continuity"] = {}
+    values["python_distributions"][0]["wheels"][0].update(platform="macosx_15_0_arm64", deployment_target="15.0")
+    old = json.loads((fixtures / "previous-inventory.json").read_text())
+    with pytest.raises(ContinuityError, match="would drop.*macosx_11_0_arm64"):
+        check(values, old)
+
+
+@pytest.mark.parametrize("exists", [True, False])
+def test_nonadopter_source_ref_never_invokes_git(tmp_path, exists):
+    path = tmp_path / "untracked.toml"
+    if exists:
+        path.write_text("schema_version=1\n")
+    env = dict(os.environ, PATH="")
+    result = subprocess.run([sys.executable, str(Path(__file__).parents[1] / "publication_continuity.py"),
+                             "--manifest", str(path), "--version", "1.3.0", "--source-ref", "not-a-git-ref"],
+                            cwd=tmp_path, env=env, text=True, capture_output=True, timeout=10)
+    assert result.returncode == 0, result.stderr
+    assert json.loads(result.stdout) == {"status": "disabled"}
+
+
+def test_nonadopter_install_does_not_import_continuity(tmp_path, monkeypatch):
+    path = tmp_path / "input.json"
+    path.write_text(json.dumps(InstallValuesTests.valid_values()))
+    monkeypatch.setitem(sys.modules, "publication_continuity", None)
+    assert "publication_continuity" not in INSTALL.load_install_values(path)

@@ -18,7 +18,6 @@ import tomllib
 
 from release_python import wheel_targets
 
-DEFAULT_ENABLED = False
 CHANNELS = {"pypi", "npm", "homebrew", "scoop", "winget"}
 KINDS = {"asset", "crate", "pypi", "npm", "go", "homebrew", "scoop", "winget"}
 
@@ -35,9 +34,9 @@ def string(value, label):
 
 def configuration(manifest):
     """Absence is opt-out; declaration is always blocking, with no bypass flag."""
-    config = manifest.get("publication_continuity", {} if DEFAULT_ENABLED else None)
-    if config is None and "publication_continuity" not in manifest:
+    if "publication_continuity" not in manifest:
         return None
+    config = manifest["publication_continuity"]
     if not isinstance(config, dict) or set(config) - {"deprecations"}:
         raise ContinuityError("publication_continuity must be a table containing only deprecations")
     rows = config.get("deprecations", [])
@@ -125,32 +124,7 @@ def wheel_platform_pattern(manifest, distribution, wheel):
         return re.escape(wheel["platform"])
     if distribution.get("build_system") == "setuptools":
         return "any"
-    # Legacy runner declarations identify a native coordinate through the
-    # consumer's release targets. Refuse ambiguity rather than guess what a
-    # mutable runner label happens to build on this date.
-    coordinates = set()
-    for row in manifest.get("release_targets", []):
-        if row["os"] != wheel["os"]:
-            continue
-        triple = row["target"]
-        architecture = triple.split("-", 1)[0]
-        system = next((name for marker, name in (("-linux-", "linux"),
-            ("-apple-darwin", "darwin"), ("-windows-", "windows")) if marker in triple), None)
-        if system:
-            coordinates.add((system, architecture))
-    if len(coordinates) != 1:
-        raise ContinuityError("legacy wheel runner requires an unambiguous release target or explicit platform")
-    system, architecture = coordinates.pop()
-    if system == "linux":
-        arch = re.escape(architecture)
-        return rf"(?:manylinux[0-9_.]*|linux)_{arch}(?:\.manylinux[0-9_]*_{arch})?"
-    if system == "darwin":
-        arch = "arm64" if architecture == "aarch64" else architecture
-        return rf"macosx_[0-9_]+_{re.escape(arch)}"
-    arch = {"x86_64": "amd64", "aarch64": "arm64"}.get(architecture)
-    if arch is None:
-        raise ContinuityError("unsupported legacy Windows wheel coordinate")
-    return "win_" + arch
+    raise ContinuityError("continuity requires explicit platform wheel declarations")
 
 
 def check(manifest, previous):
@@ -233,6 +207,14 @@ def main():
     try:
         from publication_inventory import Inventory
         inventory = Inventory(args.repository)
+        manifest_path = Path(args.manifest)
+        if not manifest_path.exists():
+            print(json.dumps({"status": "disabled"}))
+            return 0
+        manifest = tomllib.loads(manifest_path.read_text(encoding="utf-8"))
+        if configuration(manifest) is None:
+            print(json.dumps({"status": "disabled"}))
+            return 0
         if args.source_ref:
             commit = subprocess.run(["git", "rev-parse", "--verify", args.source_ref + "^{commit}"],
                                     capture_output=True, text=True, timeout=30, check=True).stdout.strip()

@@ -10,7 +10,8 @@ below the requested version. A retry excludes the current version. It reads
 that release's actual GitHub assets, its historical artifact manifest, and
 public registry version lookups for the historical crate, PyPI and npm names.
 It also inventories Go module tags for exactly the previous release version.
-Older module tags do not reappear in later baselines. Non-semver release tags
+Older module tags do not reappear in later baselines. Independently versioned
+Go submodules are not covered by this release-version baseline. Non-semver release tags
 (including prerelease-looking tags marked stable) are skipped with a note. Formula, bucket and Winget publications
 are read through their declared GitHub repositories. Registry errors, incomplete
 listings and unavailable historical metadata fail closed. A first GitHub
@@ -25,9 +26,9 @@ arbitrary source files.
 Asset identifiers have the form `asset:<filename>` with the release version
 replaced by `{version}`, for example
 `asset:example_{version}_x86_64-unknown-linux-gnu.tar.gz`. The new manifest must
-still produce that artifact family for the declared target. Platform wheels
-use explicit platform declarations, or the unique native coordinate established
-by matching the legacy runner to a declared release target. Ambiguity is refused.
+still produce that artifact family for the declared target. Platform wheels require explicit platform declarations exactly matching the
+shipped wheel platform tags. Legacy runner labels are refused. A changed platform
+tag drops the old asset family and requires a user-approved deprecation.
 Other identifiers are `crate:<package>`, `pypi:<normalized-name>`,
 `npm:<package>`, `go:<module>`, `homebrew:<tap>/<formula-path>`,
 `scoop:<bucket>/<manifest-path>` and `winget:<identifier>`.
@@ -63,5 +64,4 @@ tag push. Preflight records the same check in its final blocking summary and
 per-channel results. Both paths call `publication_continuity.py`; its pure
 comparison accepts an injected previous inventory, and `publication_inventory`
 owns read-only service access. Tests use controlled listings and never publish.
-`DEFAULT_ENABLED` is the single default-policy switch; consumer declaration is
-the default in this version.
+Consumer declaration is the only switch.
