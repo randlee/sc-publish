@@ -106,6 +106,8 @@ def test_missing_candidate_declaration_cannot_produce_passing_compatibility_jobs
 
 
 def test_installer_renders_declaration_and_extends_only_selected_workflows(tmp_path):
+    if not (INSTALL.PACKAGE_ROOT / ".sc-publish-source-root").is_file():
+        pytest.skip("installed consumers do not re-run the package source installer")
     values = InstallValuesTests.valid_values()
     values["rc_python_compatibility"] = copy.deepcopy(manifest()["rc_python_compatibility"])
     # This fixture's declared wheel platform is ubuntu-latest only.
