@@ -4,7 +4,6 @@ from __future__ import annotations
 import argparse
 import json
 from release_python import cmd_python_wheel_matrix, wheel_targets, verify_platforms, explicit_asset_patterns
-
 import re
 import shutil
 import tarfile
@@ -476,6 +475,8 @@ def cmd_release_asset_patterns(args: argparse.Namespace) -> int:
         print(pattern)
     for package in manifest.get("npm_packages", []):
         print("^" + re.escape(package["name"].replace("@", "").replace("/", "-")) + r"-[0-9].*\.tgz$")
+    from go_release import print_asset_patterns
+    print_asset_patterns(manifest)
     return 0
 
 

@@ -403,3 +403,11 @@ def test_nonadopter_install_does_not_import_continuity(tmp_path, monkeypatch):
     path.write_text(json.dumps(InstallValuesTests.valid_values()))
     monkeypatch.setitem(sys.modules, "publication_continuity", None)
     assert "publication_continuity" not in INSTALL.load_install_values(path)
+
+
+def test_source_ref_refuses_absolute_manifest_path(tmp_path):
+    result = subprocess.run([sys.executable, str(Path(__file__).parents[1] / "publication_continuity.py"),
+                             "--manifest", str(tmp_path / "manifest.toml"), "--version", "1.3.0",
+                             "--source-ref", "HEAD"], capture_output=True, text=True, timeout=10)
+    assert result.returncode == 1
+    assert "repository-relative" in result.stderr

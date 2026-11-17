@@ -29,10 +29,12 @@ def wheel_targets(distribution):
                 raise ValueError("wheel os must name a GitHub runner")
             if item["target"].endswith("linux-gnu"):
                 manylinux = item.get("manylinux")
-                if manylinux != "2_28":
-                    raise ValueError("explicit Linux wheels require manylinux=2_28")
+                if not isinstance(manylinux, str) or not re.fullmatch(r"2_[0-9]+", manylinux):
+                    raise ValueError("explicit Linux wheels require a manylinux=2_N policy")
                 arch = item["target"].split("-", 1)[0]
-                if not item["os"].startswith("ubuntu-") or item["platform"] != f"manylinux_2_28_{arch}":
+                base = f"manylinux_{manylinux}_{arch}"
+                allowed = {base, base + f".manylinux2014_{arch}"} if manylinux == "2_17" else {base}
+                if not item["os"].startswith("ubuntu-") or item["platform"] not in allowed:
                     raise ValueError("Linux wheel runner/target/platform mismatch")
             elif item["target"].endswith("apple-darwin"):
                 deployment = item.get("deployment_target")
@@ -89,7 +91,7 @@ def verify_platforms(distribution, paths):
         return
     found = set()
     for path in paths:
-        tags = set(path.stem.rsplit("-", 1)[-1].split("."))
+        tags = {path.stem.rsplit("-", 1)[-1]}
         matched = expected & tags
         if len(matched) != 1 or found & matched:
             raise ValueError("Python wheel platforms do not match declared unique targets")
@@ -104,7 +106,7 @@ def main():
     parser.add_argument("--platform", required=True)
     args = parser.parse_args()
     paths = list(args.asset_dir.glob("*.whl"))
-    if len(paths) != 1 or args.platform not in paths[0].stem.rsplit("-", 1)[-1].split("."):
+    if len(paths) != 1 or args.platform != paths[0].stem.rsplit("-", 1)[-1]:
         raise SystemExit("built wheel does not match declared platform")
 
 

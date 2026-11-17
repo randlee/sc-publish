@@ -178,6 +178,13 @@ def load_install_values(path: Path) -> dict[str, object]:
         except ValueError as error:
             raise argparse.ArgumentTypeError(str(error)) from error
 
+    if "go_modules" in values:
+        from go_release import configuration as go_configuration
+        try:
+            go_configuration(values)
+        except ValueError as error:
+            raise argparse.ArgumentTypeError(str(error)) from error
+
     project = _require_mapping(values.get("project"), "project")
     for field in ("name", "archive_prefix", "description", "homepage", "license"):
         _require_string(project.get(field), f"project.{field}")
@@ -705,6 +712,8 @@ def template_values(values: dict[str, object]) -> dict[str, object]:
         "has_rust_toolchain": "rust_toolchain" in project,
         "has_sc_lint_source_revision": "sc_lint_source_revision" in project,
         "has_prerelease": "prerelease" in values,
+        "has_go_modules": bool(values.get("go_modules")),
+        "go_modules": _toml_literal(values.get("go_modules", [])),
         "has_continuity": "publication_continuity" in values,
         "publication_continuity": _toml_literal(values.get("publication_continuity", {})),
         "has_docli": has_docli,

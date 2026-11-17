@@ -4,6 +4,8 @@ version: 0.1.0
 description: Render a complete repository-specific release-artifact manifest.
 format: toml
 required_variables:
+  - has_go_modules
+  - go_modules
   - has_continuity
   - publication_continuity
   - schema_version
@@ -71,6 +73,9 @@ required_variables:
   - has_channel_scoop
 ---
 schema_version = {{ schema_version }}
+{% if has_go_modules %}
+go_modules = {{ go_modules }}
+{% endif %}
 {% if has_continuity %}
 publication_continuity = {{ publication_continuity }}
 {% endif %}

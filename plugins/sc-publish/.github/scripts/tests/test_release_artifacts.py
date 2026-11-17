@@ -508,14 +508,9 @@ def run_release_gate_readiness(
 
 def release_tag_step_shell() -> str:
     """Extract the executed shell body that creates or safely reuses a release tag."""
-    workflow = release_workflow_text()
-    step = workflow.split("      - name: Ensure tag is correct or create it\n", 1)[1].split(
-        "\n  build:\n", 1
-    )[0]
-    body = step.split("        run: |\n", 1)[1]
-    lines = body.splitlines()
-    assert all(not line or line.startswith("          ") for line in lines)
-    return "\n".join(line[10:] if line else "" for line in lines)
+    import yaml
+    steps = yaml.safe_load(release_workflow_text())["jobs"]["gate-and-tag"]["steps"]
+    return next(step["run"] for step in steps if step.get("id") == "release-ref")
 
 
 def run_release_tag_step(
@@ -931,7 +926,7 @@ def test_crates_leg_is_separate_and_independently_retryable() -> None:
     crates_text = crates_publish_workflow_text()
 
     # The GitHub Release leg must not depend on crates.io publication.
-    assert "needs: [gate-and-tag, build, build-python-wheels, build-python-sdists, build-npm]" in release_text
+    assert "needs: [gate-and-tag, build, build-python-wheels, build-python-sdists, build-npm, go-verified]" in release_text
     assert "needs: [gate-and-tag, build, publish," not in release_text
 
     assert "workflow_dispatch:" in crates_text
@@ -1048,6 +1043,7 @@ def test_no_single_repo_concerns_leak_into_kit_workflows_actions_or_scripts() ->
     kit_scripts = (
         "bootstrap_sc_compose.py",
         "publication_continuity.py",
+        "go_release.py",
         "publication_inventory.py",
         "setup_sc_lint_source.py",
         "release_artifacts.py",
@@ -2685,7 +2681,12 @@ def test_root_release_workflow_threads_retry_provenance_and_builds_from_main() -
     assert 'git tag "$tag" "$main_sha"' in workflow
     assert "build_ref: ${{ steps.release-ref.outputs.build_ref }}" in workflow
     assert workflow.count('echo "build_ref=$main_sha" >> "$GITHUB_OUTPUT"') == 1
-    assert workflow.count("needs.gate-and-tag.outputs.build_ref") == 10
+    import yaml
+    jobs = yaml.safe_load(workflow)["jobs"]
+    for name in ("build", "publish", "release-plan", "build-python-wheels", "build-python-sdists",
+                 "build-npm", "publish-testpypi", "release", "go-plan", "build-go-modules", "go-verified"):
+        checkout = next(step for step in jobs[name]["steps"] if step.get("uses", "").startswith("actions/checkout@"))
+        assert checkout["with"]["ref"] == "${{ needs.gate-and-tag.outputs.build_ref }}", name
     assert "gate-and-tag.outputs.release_ref" not in workflow
     assert "ref: ${{ needs.gate-and-tag.outputs.release_tag }}" not in workflow
     assert "ref: ${{ needs.gate-and-tag.outputs.release_ref }}" not in workflow

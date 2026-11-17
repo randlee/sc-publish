@@ -10,7 +10,7 @@ import argparse
 import html
 import json
 import os
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 import re
 import subprocess
 import sys
@@ -208,6 +208,8 @@ def main():
         from publication_inventory import Inventory
         inventory = Inventory(args.repository)
         if args.source_ref:
+            if Path(args.manifest).is_absolute() or PureWindowsPath(args.manifest).is_absolute():
+                raise ContinuityError("--source-ref requires a repository-relative manifest path")
             commit = subprocess.run(["git", "rev-parse", "--verify", args.source_ref + "^{commit}"],
                                     capture_output=True, text=True, timeout=30, check=True).stdout.strip()
             entry = subprocess.run(["git", "ls-tree", "--name-only", commit, "--", args.manifest],

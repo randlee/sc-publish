@@ -343,3 +343,6 @@ Rollout checklist, per consumer (not performed by this change):
   Require a successful immutability check, not merely an admin's earlier result.
 - Review the consumer PR before adoption. Publication is a separate authorization;
   verify final `immutable:true` before authorizing post-release channels.
+
+See [native Go module artifacts](docs/go-modules.md) for optional module bundles,
+native qualification, immutable submodule tags and proxy verification.

@@ -67,6 +67,9 @@ def load_manifest(path: Path, *, with_channel_contracts: bool = False) -> dict:
         "npm_packages": data.get("npm_packages", []),
         "channels": data.get("channels", {}),
     }
+    if "go_modules" in data:
+        from go_release import configuration
+        manifest["go_modules"] = configuration(data)
     if "publication_continuity" in data:
         from publication_continuity import configuration
         configuration(data)
