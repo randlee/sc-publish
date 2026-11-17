@@ -56,6 +56,14 @@ jobs:
           RELEASE_VERSION: ${{ inputs.version }}
         run: python3 .github/scripts/release_immutability.py --tag "$RELEASE_VERSION"
 
+      - id: publication_continuity
+        name: Verify declared publication continuity (read-only)
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_VERSION: ${{ inputs.version }}
+        run: python3 .github/scripts/publication_continuity.py --manifest "$RELEASE_ARTIFACT_MANIFEST" --version "$RELEASE_VERSION"
+
       - id: secret_plan
         name: Read non-disclosing credential plan from release manifest
         continue-on-error: true
@@ -412,6 +420,7 @@ jobs:
         shell: bash
         env:
           IMMUTABLE_RELEASES: ${{ steps.immutable_releases.outcome }}
+          PUBLICATION_CONTINUITY: ${{ steps.publication_continuity.outcome }}
           OWNERSHIP: ${{ steps.ownership.outcome }}
           RELEASE_METADATA: ${{ steps.meta.outcome }}
           RELEASE_TAG: ${{ steps.meta.outputs.release_tag }}
@@ -433,6 +442,7 @@ jobs:
           jq -e 'type == "object"' <<<"${credential_liveness_channels_json}" >/dev/null \
             || { echo 'CREDENTIAL_LIVENESS_CHANNELS must be a JSON object.' >&2; exit 1; }
           outcomes="$(jq -nc \
+            --arg publication_continuity "${PUBLICATION_CONTINUITY}" \
             --arg immutable_releases "${IMMUTABLE_RELEASES}" \
             --arg ownership "${OWNERSHIP}" \
             --arg release_metadata "${RELEASE_METADATA}" \
@@ -443,7 +453,7 @@ jobs:
             --argjson credential_liveness_channels "${credential_liveness_channels_json}" \
             --arg registry_state "${REGISTRY_STATE}" \
             --arg github_release_permissions "${GITHUB_RELEASE_PERMISSIONS}" \
-            '{immutable_releases: $immutable_releases, ownership: $ownership, release_metadata: $release_metadata, repository_secrets: $repository_secrets, repository_secret_channels: $repository_secret_channels, environment_secrets: $environment_secrets, credential_liveness: $credential_liveness, credential_liveness_channels: $credential_liveness_channels, registry_state: $registry_state, github_release_permissions: $github_release_permissions}')"
+            '{publication_continuity: $publication_continuity, immutable_releases: $immutable_releases, ownership: $ownership, release_metadata: $release_metadata, repository_secrets: $repository_secrets, repository_secret_channels: $repository_secret_channels, environment_secrets: $environment_secrets, credential_liveness: $credential_liveness, credential_liveness_channels: $credential_liveness_channels, registry_state: $registry_state, github_release_permissions: $github_release_permissions}')"
           results="$(python3 .github/scripts/release_artifacts.py channel-preflight-results \
             --manifest "${RELEASE_ARTIFACT_MANIFEST}" \
             --outcomes "${outcomes}" \
@@ -460,6 +470,7 @@ jobs:
         shell: bash
         env:
           IMMUTABLE_RELEASES: ${{ steps.immutable_releases.outcome }}
+          PUBLICATION_CONTINUITY: ${{ steps.publication_continuity.outcome }}
           OWNERSHIP: ${{ steps.ownership.outcome }}
           SECRET_PLAN: ${{ steps.secret_plan.outcome }}
           BUILD_PLAN: ${{ steps.build_plan.outcome }}
@@ -493,6 +504,7 @@ jobs:
               *) failed+=("${name}") ;;
             esac
           }
+          record publication-continuity "${PUBLICATION_CONTINUITY}"
           record immutable-releases "${IMMUTABLE_RELEASES}"
           record ownership "${OWNERSHIP}"
           record secret-plan "${SECRET_PLAN}"

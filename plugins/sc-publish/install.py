@@ -21,6 +21,7 @@ if TYPE_CHECKING:
 PACKAGE_ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(PACKAGE_ROOT / ".github" / "scripts"))
 from release_python import wheel_targets
+from publication_continuity import configuration as continuity_configuration
 
 SOURCE_ROOT_MARKER = ".sc-publish-source-root"
 TEMPLATES = {
@@ -170,6 +171,11 @@ def load_install_values(path: Path) -> dict[str, object]:
 
     if values.get("schema_version") != 1:
         raise argparse.ArgumentTypeError("schema_version must be 1")
+
+    try:
+        continuity_configuration(values)
+    except ValueError as error:
+        raise argparse.ArgumentTypeError(str(error)) from error
 
     project = _require_mapping(values.get("project"), "project")
     for field in ("name", "archive_prefix", "description", "homepage", "license"):
@@ -698,6 +704,8 @@ def template_values(values: dict[str, object]) -> dict[str, object]:
         "has_rust_toolchain": "rust_toolchain" in project,
         "has_sc_lint_source_revision": "sc_lint_source_revision" in project,
         "has_prerelease": "prerelease" in values,
+        "has_continuity": "publication_continuity" in values,
+        "publication_continuity": _toml_literal(values.get("publication_continuity", {})),
         "has_docli": has_docli,
         "docli": template_docli,
         "preflight_checks": preflight_checks,

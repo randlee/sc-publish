@@ -1,5 +1,9 @@
 # sc-publish Publish Kit
 
+Optional [publication continuity](docs/publication-continuity.md) checks block
+preflight and release when a previously published item would disappear without
+a reviewed, user-approved deprecation in the manifest.
+
 sc-publish is a vendorable release/publish kit: standardized publisher agents
 plus standardized per-channel GitHub workflows, all driven by one
 repository-specific release manifest. Every kit file is installed

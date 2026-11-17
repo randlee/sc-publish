@@ -696,6 +696,7 @@ def run_release_preflight_channel_results_shell(
         **os.environ,
         "OWNERSHIP": "success",
         "IMMUTABLE_RELEASES": "success",
+        "PUBLICATION_CONTINUITY": "success",
         "RELEASE_METADATA": "success",
         "RELEASE_TAG": "v1.5.0",
         "REPOSITORY_SECRETS": "success",
@@ -1046,6 +1047,8 @@ def test_no_single_repo_concerns_leak_into_kit_workflows_actions_or_scripts() ->
     )
     kit_scripts = (
         "bootstrap_sc_compose.py",
+        "publication_continuity.py",
+        "publication_inventory.py",
         "setup_sc_lint_source.py",
         "release_artifacts.py",
         "release_manifest.py",

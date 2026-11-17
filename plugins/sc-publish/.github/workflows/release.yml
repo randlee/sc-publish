@@ -134,6 +134,13 @@ jobs:
           RELEASE_SHA: ${{ steps.release_gate.outputs.release_sha }}
         run: python3 .github/scripts/npm_release.py check-source --manifest "$RELEASE_ARTIFACT_MANIFEST" --tag "$RELEASE_TAG" --source-ref "$RELEASE_SHA"
 
+      - name: Verify declared publication continuity before any publication
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_VERSION: ${{ steps.meta.outputs.release_version }}
+          RELEASE_SHA: ${{ steps.release_gate.outputs.release_sha }}
+        run: python3 .github/scripts/publication_continuity.py --manifest "$RELEASE_ARTIFACT_MANIFEST" --version "$RELEASE_VERSION" --source-ref "$RELEASE_SHA"
+
       - name: Ensure tag is correct or create it
         id: release-ref
         shell: bash

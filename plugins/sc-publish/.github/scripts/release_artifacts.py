@@ -172,6 +172,9 @@ def cmd_channel_preflight_results(args: argparse.Namespace) -> int:
             for channel_name in _channel_names(manifest)
         ],
     ]
+    if "publication_continuity" in manifest:
+        for channel in contracts:
+            channel["publication_continuity"] = True
     tag = args.tag or None
     results = [
         _channel_preflight_result(channel, outcomes, tag) for channel in contracts

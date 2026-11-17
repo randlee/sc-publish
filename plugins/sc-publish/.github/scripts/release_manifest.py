@@ -67,6 +67,10 @@ def load_manifest(path: Path, *, with_channel_contracts: bool = False) -> dict:
         "npm_packages": data.get("npm_packages", []),
         "channels": data.get("channels", {}),
     }
+    if "publication_continuity" in data:
+        from publication_continuity import configuration
+        configuration(data)
+        manifest["publication_continuity"] = data["publication_continuity"]
     # Optional: the prerelease skill's table is validated only when declared.
     if "prerelease" in data:
         manifest["prerelease"] = data["prerelease"]
@@ -730,6 +734,12 @@ def _channel_preflight_result(
             "kind": "release_authorization",
             "requirements": [requirement],
             "status": _preflight_outcome_status(outcomes.get(outcome_key)),
+        })
+    if channel.get("publication_continuity"):
+        checks.append({
+            "kind": "publication_continuity",
+            "requirements": ["preserve previous publications or record user-approved deprecations"],
+            "status": _preflight_outcome_status(outcomes.get("publication_continuity")),
         })
     for key, outcome_key, fallback_key in (
         ("repository_secrets", "repository_secret_channels", "repository_secrets"),
