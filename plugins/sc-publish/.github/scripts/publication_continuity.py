@@ -207,17 +207,14 @@ def main():
     try:
         from publication_inventory import Inventory
         inventory = Inventory(args.repository)
-        manifest_path = Path(args.manifest)
-        if not manifest_path.exists():
-            print(json.dumps({"status": "disabled"}))
-            return 0
-        manifest = tomllib.loads(manifest_path.read_text(encoding="utf-8"))
-        if configuration(manifest) is None:
-            print(json.dumps({"status": "disabled"}))
-            return 0
         if args.source_ref:
             commit = subprocess.run(["git", "rev-parse", "--verify", args.source_ref + "^{commit}"],
                                     capture_output=True, text=True, timeout=30, check=True).stdout.strip()
+            entry = subprocess.run(["git", "ls-tree", "--name-only", commit, "--", args.manifest],
+                                   capture_output=True, text=True, timeout=30, check=True).stdout.strip()
+            if not entry:
+                print(json.dumps({"status": "disabled"}))
+                return 0
             source = subprocess.run(["git", "show", f"{commit}:{args.manifest}"],
                                     capture_output=True, text=True, timeout=30, check=True).stdout
             manifest = tomllib.loads(source)

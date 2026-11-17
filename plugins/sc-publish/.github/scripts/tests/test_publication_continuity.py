@@ -368,17 +368,34 @@ def test_changed_wheel_platform_is_a_drop():
         check(values, old)
 
 
-@pytest.mark.parametrize("exists", [True, False])
-def test_nonadopter_source_ref_never_invokes_git(tmp_path, exists):
-    path = tmp_path / "untracked.toml"
-    if exists:
-        path.write_text("schema_version=1\n")
-    env = dict(os.environ, PATH="")
+@pytest.mark.parametrize("case", ["nonadopter", "adopter", "invalid-ref", "missing-at-commit"])
+def test_source_ref_uses_committed_policy_and_ref_errors_fail_closed(tmp_path, case):
+    def git(*args):
+        return subprocess.run(["git", *args], cwd=tmp_path, check=True,
+                              capture_output=True, text=True).stdout.strip()
+    git("init")
+    git("config", "user.email", "fixture@example.test")
+    git("config", "user.name", "Fixture")
+    path = tmp_path / "manifest.toml"
+    path.write_text("schema_version=1\n" + ("[publication_continuity]\n" if case == "adopter" else ""))
+    git("add", "manifest.toml")
+    git("commit", "-m", "fixture")
+    commit = git("rev-parse", "HEAD")
+    # The checkout intentionally disagrees with the committed declaration.
+    path.write_text("schema_version=1\n")
     result = subprocess.run([sys.executable, str(Path(__file__).parents[1] / "publication_continuity.py"),
-                             "--manifest", str(path), "--version", "1.3.0", "--source-ref", "not-a-git-ref"],
-                            cwd=tmp_path, env=env, text=True, capture_output=True, timeout=10)
-    assert result.returncode == 0, result.stderr
-    assert json.loads(result.stdout) == {"status": "disabled"}
+                             "--manifest", "absent.toml" if case == "missing-at-commit" else "manifest.toml",
+                             "--version", "1.3.0", "--source-ref", "invalid-ref" if case == "invalid-ref" else commit,
+                             "--repository", ""],
+                            cwd=tmp_path, text=True, capture_output=True, timeout=10)
+    if case in {"nonadopter", "missing-at-commit"}:
+        assert result.returncode == 0, result.stderr
+        assert json.loads(result.stdout) == {"status": "disabled"}
+    else:
+        assert result.returncode == 1
+        assert "disabled" not in result.stdout
+        assert ("repository must be OWNER/REPO" if case == "adopter" else "rev-parse") in result.stderr
+
 
 
 def test_nonadopter_install_does_not_import_continuity(tmp_path, monkeypatch):
