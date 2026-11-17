@@ -24,7 +24,7 @@ jobs:
       - name: Install publish-kit test dependencies
         run: '"$SC_COMPOSE_PYTHON" -m pip install pytest==8.3.5 PyYAML==6.0.3'
       - name: Run complete source publish-kit tests
-        run: '"$SC_COMPOSE_PYTHON" -m pytest plugins/sc-publish/.github/scripts/tests -q'
+        run: '"$SC_COMPOSE_PYTHON" -m pytest plugins/sc-publish/.github/scripts/tests -v'
       - name: Validate workflow YAML syntax
         run: |
           python -m pip install PyYAML==6.0.2
