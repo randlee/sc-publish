@@ -9,11 +9,12 @@ The check selects the greatest published, non-draft, stable semantic release
 below the requested version. A retry excludes the current version. It reads
 that release's actual GitHub assets, its historical artifact manifest, and
 public registry version lookups for the historical crate, PyPI and npm names.
-It also inventories published Go module tags, including submodule tags that
-predate the previous GitHub release. Formula, bucket and Winget publications
+It also inventories Go module tags for exactly the previous release version.
+Older module tags do not reappear in later baselines. Non-semver release tags
+(including prerelease-looking tags marked stable) are skipped with a note. Formula, bucket and Winget publications
 are read through their declared GitHub repositories. Registry errors, incomplete
 listings and unavailable historical metadata fail closed. A first GitHub
-release has no prior assets; any historical Go module tags still count.
+release has no previous publication baseline.
 
 The baseline is never reconstructed from the new manifest. In particular,
 removing a package from the new manifest cannot remove it from the comparison.
@@ -25,8 +26,8 @@ Asset identifiers have the form `asset:<filename>` with the release version
 replaced by `{version}`, for example
 `asset:example_{version}_x86_64-unknown-linux-gnu.tar.gz`. The new manifest must
 still produce that artifact family for the declared target. Platform wheels
-must use explicit platform declarations when continuity is enabled; a runner
-label alone does not establish which wheel platform will be published.
+use explicit platform declarations, or the unique native coordinate established
+by matching the legacy runner to a declared release target. Ambiguity is refused.
 Other identifiers are `crate:<package>`, `pypi:<normalized-name>`,
 `npm:<package>`, `go:<module>`, `homebrew:<tap>/<formula-path>`,
 `scoop:<bucket>/<manifest-path>` and `winget:<identifier>`.
@@ -48,8 +49,12 @@ Each dropped item needs its own reviewed manifest record:
 
 The approval reference must identify the issue or PR containing user approval;
 the fields are documentary evidence for human review, not an automatic grant
-of approval. Empty, malformed, duplicate, never-published or still-retained
-entries are refused. No ledger or additional release asset is created.
+of approval. Empty, malformed, duplicate or still-retained entries are refused. Approval is
+required on the release that drops an item. On subsequent releases, an entry
+absent from both the previous baseline and current plan produces a nonfatal
+stale-entry note. The existing Actions step summary labels approved drops with
+the identifier, reason and approval reference. No ledger or additional release
+asset is created.
 
 ## Ordering and extension
 

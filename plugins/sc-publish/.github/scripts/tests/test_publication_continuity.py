@@ -12,7 +12,7 @@ import pytest
 import yaml
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from publication_continuity import ContinuityError, check, configuration, normalize_asset
+from publication_continuity import ContinuityError, check, configuration, normalize_asset, planned_asset_patterns, write_summary
 from publication_inventory import Inventory
 from test_install import INSTALL, InstallValuesTests
 
@@ -71,11 +71,10 @@ def test_bad_or_bypass_configuration_fails_closed(config):
         configuration(values)
 
 
-def test_deprecations_cannot_name_never_published_or_retained_items():
+def test_stale_deprecations_are_notes_but_retained_items_are_refused():
     values = manifest()
     values["publication_continuity"]["deprecations"] = [approval("crate:never-published")]
-    with pytest.raises(ContinuityError, match="never published"):
-        check(values, previous())
+    assert "Stale deprecation" in check(values, previous())["notes"][0]
     values["publication_continuity"]["deprecations"] = [approval("crate:tool-core")]
     with pytest.raises(ContinuityError, match="does not name a dropped"):
         check(values, previous())
@@ -141,8 +140,8 @@ def test_actual_previous_inventory_excludes_current_retry_and_queries_old_declar
             {"id": 8, "tag_name": "v1.2.3", "draft": False, "prerelease": False}],
         "repos/team/repo/releases/8/assets?per_page=100&page=1": [{"name": "old-1.2.3.zip", "state": "uploaded"}],
         "repos/team/repo/contents/release/publish-artifacts.toml?ref=v1.2.3": encoded(old_manifest),
-        "repos/team/repo/tags?per_page=100&page=1": [{"name": "binding/v1.1.0"}, {"name": "binding/v1.3.0"}],
-        "repos/team/repo/contents/binding/go.mod?ref=binding%2Fv1.1.0": encoded("module example.test/team/repo/binding\n"),
+        "repos/team/repo/tags?per_page=100&page=1": [{"name": "binding/v1.2.3"}, {"name": "binding/v1.3.0"}],
+        "repos/team/repo/contents/binding/go.mod?ref=binding%2Fv1.2.3": encoded("module example.test/team/repo/binding\n"),
     }
     def query(path):
         calls.append(path)
@@ -153,7 +152,7 @@ def test_actual_previous_inventory_excludes_current_retry_and_queries_old_declar
         return "published"
     old = Inventory("team/repo", query=query, probe=probe).previous("1.3.0", "release/publish-artifacts.toml")
     assert old == {"tag": "v1.2.3", "assets": ["old-1.2.3.zip"],
-                   "publications": ["crate:old-core", "go:example.test/team/repo/binding"]}
+                   "publications": ["crate:old-core", "go:example.test/team/repo/binding"], "notes": []}
     assert probes == ["https://crates.io/api/v1/crates/old-core/1.2.3"]
     assert not any("releases/9/" in path for path in calls)
 
@@ -199,3 +198,169 @@ def test_workflows_block_on_the_same_checker_before_tag_and_in_preflight_summary
     gate = next(step for step in steps if step.get("name") == "Deny release after complete preflight summary")
     assert gate["env"]["PUBLICATION_CONTINUITY"] == "${{ steps.publication_continuity.outcome }}"
     assert 'record publication-continuity "${PUBLICATION_CONTINUITY}"' in gate["run"]
+
+
+def test_release_after_approved_drop_needs_no_new_deprecation():
+    values = manifest()
+    values["publication_continuity"]["deprecations"] = [approval("go:example.test/retired")]
+    before = previous()
+    before["publications"].append("go:example.test/retired")
+    assert check(values, before)["deprecated"] == ["go:example.test/retired"]
+    after = previous()
+    after["tag"] = "v1.3.0"
+    after["assets"] = []
+    result = check(values, after)
+    assert result["deprecated"] == []
+    assert "go:example.test/retired" in result["notes"][0]
+
+
+def test_old_go_tag_does_not_reappear_in_later_baseline():
+    inventory = Inventory("team/repo", query=lambda path: (200, [{"name": "binding/v1.1.0"}])
+                          if "/tags?" in path else pytest.fail(path))
+    assert inventory.go_publications((1, 2, 3)) == set()
+
+
+@pytest.mark.parametrize("extra", [False, True])
+def test_duplicate_and_extra_field_deprecations_fail(extra):
+    values = manifest()
+    row = approval("crate:old")
+    values["publication_continuity"]["deprecations"] = [dict(row, unexpected="value")] if extra else [row, row]
+    with pytest.raises(ContinuityError, match="exactly|duplicate"):
+        configuration(values)
+
+
+def test_skips_drafts_prereleases_and_nonsemver_tags_with_notes():
+    releases = [{"id": i, "tag_name": tag, "draft": draft, "prerelease": pre}
+                for i, (tag, draft, pre) in enumerate([
+                    ("v9.0.0", True, False), ("v8.0.0", False, True),
+                    ("notes-only", False, False), ("v1.3.0-rc.1", False, False)])]
+    inventory = Inventory("team/repo", query=lambda path: (200, releases)
+                          if "/releases?" in path else pytest.fail(path))
+    result = inventory.previous("1.3.0", "manifest.toml")
+    assert result["tag"] is None
+    assert result["publications"] == []
+    assert result["notes"] == ["Skipped non-stable-semver release tag: notes-only",
+                               "Skipped non-stable-semver release tag: v1.3.0-rc.1"]
+
+
+def test_unuploaded_asset_is_not_a_complete_inventory():
+    def query(path):
+        if "/releases?" in path:
+            return 200, [{"id": 1, "tag_name": "v1.2.3", "draft": False, "prerelease": False}]
+        if "/assets?" in path:
+            return 200, [{"name": "broken.zip", "state": "new"}]
+        pytest.fail(path)
+    with pytest.raises(ContinuityError, match="incomplete asset"):
+        Inventory("team/repo", query=query).previous("1.3.0", "manifest.toml")
+
+
+def test_pagination_is_bounded_and_never_silently_truncates():
+    calls = []
+    def query(path):
+        calls.append(path)
+        return 200, [{}] * 100
+    with pytest.raises(ContinuityError, match="pagination limit"):
+        list(Inventory("team/repo", query=query).pages("repos/team/repo/releases"))
+    assert len(calls) == 100
+    assert calls[-1].endswith("page=100")
+
+
+def test_duplicate_normalized_asset_families_fail():
+    old = previous()
+    old["assets"] += ["tool_v1.2.3_cpu-platform.zip"]
+    with pytest.raises(ContinuityError, match="duplicate asset family"):
+        check(manifest(), old)
+
+
+@pytest.mark.parametrize("status,expected", [(200, True), (404, False), (403, None)])
+def test_other_channel_inventory_uses_declared_providers(status, expected):
+    channels = {"homebrew": {"tap_repository": "team/tap", "formulas": [{"path": "Formula/tool.rb"}]},
+                "scoop": {"bucket_repository": "team/bucket", "manifest_path": "tool.json"},
+                "winget": {"identifier": "Vendor.Tool"}}
+    calls = []
+    def query(path):
+        calls.append(path)
+        value = [{"name": "1.2.3"}] if "winget-pkgs" in path else encoded("published")
+        return status, value
+    inventory = Inventory("team/repo", query=query)
+    if expected is None:
+        with pytest.raises(ContinuityError, match="HTTP 403"):
+            inventory.other_channels({"channels": channels})
+    else:
+        result = inventory.other_channels({"channels": channels})
+        assert result == ({"homebrew:team/tap/Formula/tool.rb", "scoop:team/bucket/tool.json",
+                           "winget:Vendor.Tool"} if expected else set())
+        assert calls == ["repos/team/tap/contents/Formula/tool.rb?ref=HEAD",
+                         "repos/team/bucket/contents/tool.json?ref=HEAD",
+                         "repos/microsoft/winget-pkgs/contents/manifests/v/Vendor/Tool"]
+
+
+def test_real_previous_release_fixture_preserves_assets_and_all_published_channels():
+    fixtures = Path(__file__).parent / "fixtures/continuity"
+    values = tomllib.loads((fixtures / "v1.8.0-manifest.toml").read_text())
+    # Current plan pins the legacy macOS alias to its declared native runner.
+    for distribution in values["python_distributions"]:
+        distribution["wheels"] = ["macos-15" if runner == "macos-latest" else runner
+                                  for runner in distribution["wheels"]]
+    values["publication_continuity"] = {}
+    old = json.loads((fixtures / "v1.8.0-inventory.json").read_text())
+    assert check(values, old)["status"] == "pass"
+    values["crates"] = [row for row in values["crates"] if row["package"] != "sc-sha"]
+    with pytest.raises(ContinuityError, match="crate:sc-sha"):
+        check(values, old)
+
+
+def test_wheel_npm_and_go_asset_patterns_require_the_declared_platforms():
+    fixtures = Path(__file__).parent / "fixtures/continuity"
+    values = tomllib.loads((fixtures / "v1.8.0-manifest.toml").read_text())
+    # Current plan pins the legacy macOS alias to its declared native runner.
+    for distribution in values["python_distributions"]:
+        distribution["wheels"] = ["macos-15" if runner == "macos-latest" else runner
+                                  for runner in distribution["wheels"]]
+    values["npm_packages"] = [{"name": "@team/tool"}]
+    values["go_modules"] = [{"module": "example.test/tool", "artifact_prefix": "binding",
+                              "targets": [{"target": "aarch64-apple-darwin"}]}]
+    patterns = planned_asset_patterns(values)
+    matches = lambda name: any(pattern.fullmatch(name) for pattern in patterns)
+    assert matches("team-tool-1.9.0.tgz")
+    assert matches("binding-aarch64-apple-darwin.zip")
+    assert not matches("binding-x86_64-apple-darwin.zip")
+    assert matches("sc_sha-1.9.0-cp39-abi3-win_arm64.whl")
+    assert not matches("sc_sha-1.9.0-cp39-abi3-win32.whl")
+    values["release_targets"] = []
+    with pytest.raises(ContinuityError, match="unambiguous"):
+        planned_asset_patterns(values)
+
+
+def test_summary_appends_labeled_approved_drop_and_notes(tmp_path):
+    summary = tmp_path / "summary.md"
+    summary.write_text("Existing summary\n")
+    row = approval("crate:old")
+    row["reason"] = "Retire <unsafe>"
+    write_summary({"status": "pass", "deprecated": ["crate:old"], "notes": ["Stale entry"]},
+                  {"crate:old": row}, summary)
+    text = summary.read_text()
+    assert text.startswith("Existing summary\n")
+    assert "User-approved deprecated publications" in text
+    assert "crate:old" in text and "Retire &lt;unsafe&gt;" in text
+    assert row["approval_ref"] in text and "Stale entry" in text
+
+
+@pytest.mark.parametrize("outcome", ["success", "failure", "cancelled", "skipped", "unknown", ""])
+def test_preflight_executes_continuity_denial_for_every_non_success(outcome):
+    path = Path(__file__).parents[2] / "workflows/release-preflight.yml"
+    steps = yaml.safe_load(path.read_text())["jobs"]["preflight"]["steps"]
+    gate = next(step for step in steps if step.get("name") == "Deny release after complete preflight summary")
+    env = dict(os.environ, **{key: "success" for key in gate["env"]})
+    env.update(HAS_CRATES="false", PUBLICATION_CONTINUITY=outcome)
+    result = subprocess.run(["bash", "-c", gate["run"]], env=env, capture_output=True, text=True, timeout=10)
+    assert result.returncode == (0 if outcome == "success" else 1), result.stdout + result.stderr
+
+
+def test_explicit_wheel_platform_is_exact():
+    values = {"python_distributions": [{"name": "native-tool", "wheels": [{
+        "id": "win-arm", "os": "windows-11-arm", "target": "aarch64-pc-windows-msvc",
+        "platform": "win_arm64"}]}]}
+    patterns = planned_asset_patterns(values)
+    assert any(pattern.fullmatch("native_tool-1.3.0-cp39-abi3-win_arm64.whl") for pattern in patterns)
+    assert not any(pattern.fullmatch("native_tool-1.3.0-cp39-abi3-win_amd64.whl") for pattern in patterns)

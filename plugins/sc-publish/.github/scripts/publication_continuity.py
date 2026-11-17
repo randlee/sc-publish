@@ -7,6 +7,7 @@ access live in publication_inventory; unit tests never need either service.
 from __future__ import annotations
 
 import argparse
+import html
 import json
 import os
 from pathlib import Path
@@ -107,13 +108,8 @@ def planned_asset_patterns(manifest):
         if row.get("sdist"):
             patterns.append(rf"^{name}-[^/]+\.tar\.gz$")
         for wheel in wheel_targets(row):
-            platform = wheel["platform"]
-            if not platform:
-                if row.get("build_system") == "setuptools":
-                    platform = "any"
-                else:
-                    raise ContinuityError("continuity requires explicit platform wheel declarations")
-            patterns.append(rf"^{name}-[^/]+-{re.escape(platform)}\.whl$")
+            platform = wheel_platform_pattern(manifest, row, wheel)
+            patterns.append(rf"^{name}-[^/]+-{platform}\.whl$")
     for row in manifest.get("npm_packages", []):
         name = re.escape(row["name"].replace("@", "").replace("/", "-"))
         patterns.append(rf"^{name}-[0-9][^/]*\.tgz$")
@@ -124,13 +120,50 @@ def planned_asset_patterns(manifest):
     return [re.compile(pattern) for pattern in patterns]
 
 
+def wheel_platform_pattern(manifest, distribution, wheel):
+    if wheel["platform"]:
+        return re.escape(wheel["platform"])
+    if distribution.get("build_system") == "setuptools":
+        return "any"
+    # Legacy runner declarations identify a native coordinate through the
+    # consumer's release targets. Refuse ambiguity rather than guess what a
+    # mutable runner label happens to build on this date.
+    coordinates = set()
+    for row in manifest.get("release_targets", []):
+        if row["os"] != wheel["os"]:
+            continue
+        triple = row["target"]
+        architecture = triple.split("-", 1)[0]
+        system = next((name for marker, name in (("-linux-", "linux"),
+            ("-apple-darwin", "darwin"), ("-windows-", "windows")) if marker in triple), None)
+        if system:
+            coordinates.add((system, architecture))
+    if len(coordinates) != 1:
+        raise ContinuityError("legacy wheel runner requires an unambiguous release target or explicit platform")
+    system, architecture = coordinates.pop()
+    if system == "linux":
+        arch = re.escape(architecture)
+        return rf"(?:manylinux[0-9_.]*|linux)_{arch}(?:\.manylinux[0-9_]*_{arch})?"
+    if system == "darwin":
+        arch = "arm64" if architecture == "aarch64" else architecture
+        return rf"macosx_[0-9_]+_{re.escape(arch)}"
+    arch = {"x86_64": "amd64", "aarch64": "arm64"}.get(architecture)
+    if arch is None:
+        raise ContinuityError("unsupported legacy Windows wheel coordinate")
+    return "win_" + arch
+
+
 def check(manifest, previous):
     """Compare an actual previous inventory with the new manifest, fail closed."""
     approved = configuration(manifest)
     if approved is None:
         return {"status": "disabled"}
-    if not isinstance(previous, dict) or set(previous) != {"tag", "assets", "publications"}:
-        raise ContinuityError("previous inventory requires exactly tag, assets and publications")
+    if (not isinstance(previous, dict) or not {"tag", "assets", "publications"} <= set(previous)
+            or set(previous) - {"tag", "assets", "publications", "notes"}):
+        raise ContinuityError("previous inventory requires tag, assets and publications, with optional notes")
+    notes = previous.get("notes", [])
+    if not isinstance(notes, list) or any(not isinstance(note, str) for note in notes):
+        raise ContinuityError("previous inventory notes must be an array of strings")
     tag = previous["tag"]
     if tag is not None and not re.fullmatch(r"v?\d+\.\d+\.\d+", string(tag, "previous tag")):
         raise ContinuityError("invalid previous release tag")
@@ -158,17 +191,36 @@ def check(manifest, previous):
         published.add(identifier)
         if identifier not in planned:
             missing.add(identifier)
-    unknown = set(approved) - published
-    if unknown:
-        raise ContinuityError(f"deprecation names something never published: {', '.join(sorted(unknown))}")
-    retained = set(approved) - missing
+    stale = set(approved) - published - planned
+    retained = (set(approved) - missing) - stale
     if retained:
         raise ContinuityError(f"deprecation does not name a dropped item: {', '.join(sorted(retained))}")
     denied = missing - set(approved)
     if denied:
         raise ContinuityError(f"publication continuity would drop: {', '.join(sorted(denied))}")
     return {"status": "pass", "previous_release": tag, "published": sorted(published),
-            "deprecated": sorted(missing)}
+            "deprecated": sorted(missing), "notes": [*notes, *[
+                f"Stale deprecation (absent from previous release and current plan): {identifier}"
+                for identifier in sorted(stale)]]}
+
+
+def write_summary(result, approvals, path):
+    """Label approved drops in the existing Actions summary; create no artifact."""
+    if not path or result["status"] == "disabled":
+        return
+    escape = html.escape
+    lines = ["\n### Publication continuity", f"Status: {result['status']}"]
+    if result.get("deprecated"):
+        lines.append("\nUser-approved deprecated publications:")
+        for identifier in result["deprecated"]:
+            row = approvals[identifier]
+            lines.append(f"- <code>{escape(identifier)}</code>: {escape(row['reason'])}; "
+                         f"approved by {escape(row['approved_by'])}; "
+                         f"<a href=\"{escape(row['approval_ref'], quote=True)}\">approval reference</a>")
+    for note in result.get("notes", []):
+        lines.append(f"- Note: {escape(note)}")
+    with Path(path).open("a", encoding="utf-8") as output:
+        output.write("\n".join(lines) + "\n")
 
 
 def main():
@@ -193,7 +245,9 @@ def main():
             print(json.dumps({"status": "disabled"}))
             return 0
         previous = inventory.previous(args.version, args.manifest)
-        print(json.dumps(check(manifest, previous), sort_keys=True))
+        result = check(manifest, previous)
+        write_summary(result, configuration(manifest), os.environ.get("GITHUB_STEP_SUMMARY"))
+        print(json.dumps(result, sort_keys=True))
         return 0
     except (ContinuityError, OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError) as error:
         print(f"Publication continuity failed: {error}", file=sys.stderr)

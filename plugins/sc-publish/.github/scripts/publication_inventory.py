@@ -72,6 +72,7 @@ class Inventory:
         if current is None:
             raise ContinuityError("version must be X.Y.Z or vX.Y.Z")
         eligible = []
+        notes = []
         for row in self.pages(f"repos/{self.repository}/releases"):
             if row.get("draft") is True or row.get("prerelease") is True:
                 continue
@@ -79,11 +80,14 @@ class Inventory:
                 raise ContinuityError("indeterminate previous release visibility")
             previous = version(row.get("tag_name", ""))
             if previous is None:
-                raise ContinuityError("continuity cannot order a non-semantic published release tag")
+                if not isinstance(row.get("tag_name"), str) or not row["tag_name"]:
+                    raise ContinuityError("previous release has no valid tag name")
+                notes.append(f"Skipped non-stable-semver release tag: {row['tag_name']}")
+                continue
             if previous < current:
                 eligible.append((previous, row))
         if not eligible:
-            return {"tag": None, "assets": [], "publications": sorted(self.go_publications(current))}
+            return {"tag": None, "assets": [], "publications": [], "notes": notes}
         previous, release = max(eligible, key=lambda item: item[0])
         tag = release["tag_name"]
         if type(release.get("id")) is not int or release["id"] <= 0:
@@ -98,9 +102,9 @@ class Inventory:
             raise ContinuityError("previous release has no artifact manifest; registry/channel inventory cannot be established")
         manifest = tomllib.loads(source)
         publications = self.registries(manifest, tag.removeprefix("v"))
-        publications.update(self.go_publications(current, maximum=previous))
+        publications.update(self.go_publications(previous))
         publications.update(self.other_channels(manifest))
-        return {"tag": tag, "assets": assets, "publications": sorted(publications)}
+        return {"tag": tag, "assets": assets, "publications": sorted(publications), "notes": notes}
 
     def registries(self, manifest, release_version):
         result = set()
@@ -124,8 +128,8 @@ class Inventory:
                     result.add(f"npm:{name}")
         return result
 
-    def go_publications(self, current, maximum=None):
-        """A submodule tag remains a publication even if later source drops it."""
+    def go_publications(self, previous):
+        """Only tags for the immediately previous version belong to the baseline."""
         modules = {}
         for row in self.pages(f"repos/{self.repository}/tags"):
             name = row.get("name")
@@ -136,7 +140,7 @@ class Inventory:
                 continue
             source, number = match.groups()
             parsed = version(number)
-            if parsed >= current or (maximum is not None and parsed > maximum):
+            if parsed != previous:
                 continue
             source = source or ""
             if source not in modules or modules[source][0] < parsed:
