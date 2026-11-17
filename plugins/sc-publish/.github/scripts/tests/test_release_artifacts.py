@@ -1044,6 +1044,7 @@ def test_no_single_repo_concerns_leak_into_kit_workflows_actions_or_scripts() ->
         "bootstrap_sc_compose.py",
         "publication_continuity.py",
         "go_release.py",
+        "rc_python_compatibility.py",
         "publication_inventory.py",
         "setup_sc_lint_source.py",
         "release_artifacts.py",

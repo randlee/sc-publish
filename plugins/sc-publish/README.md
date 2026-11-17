@@ -346,3 +346,6 @@ Rollout checklist, per consumer (not performed by this change):
 
 See [native Go module artifacts](docs/go-modules.md) for optional module bundles,
 native qualification, immutable submodule tags and proxy verification.
+
+See [RC Python compatibility](docs/rc-python-compatibility.md) for an optional
+once-per-candidate interpreter matrix and its required publication evidence.

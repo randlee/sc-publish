@@ -67,6 +67,10 @@ def load_manifest(path: Path, *, with_channel_contracts: bool = False) -> dict:
         "npm_packages": data.get("npm_packages", []),
         "channels": data.get("channels", {}),
     }
+    if "rc_python_compatibility" in data:
+        from rc_python_compatibility import configuration
+        configuration(data)
+        manifest["rc_python_compatibility"] = data["rc_python_compatibility"]
     if "go_modules" in data:
         from go_release import configuration
         manifest["go_modules"] = configuration(data)

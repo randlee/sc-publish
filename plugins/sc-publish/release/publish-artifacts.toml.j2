@@ -4,6 +4,8 @@ version: 0.1.0
 description: Render a complete repository-specific release-artifact manifest.
 format: toml
 required_variables:
+  - has_rc_python_compatibility
+  - rc_python_compatibility
   - has_go_modules
   - go_modules
   - has_continuity
@@ -73,6 +75,9 @@ required_variables:
   - has_channel_scoop
 ---
 schema_version = {{ schema_version }}
+{% if has_rc_python_compatibility %}
+rc_python_compatibility = {{ rc_python_compatibility }}
+{% endif %}
 {% if has_go_modules %}
 go_modules = {{ go_modules }}
 {% endif %}
