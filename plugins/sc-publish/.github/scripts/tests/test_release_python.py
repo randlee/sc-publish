@@ -206,13 +206,21 @@ def test_existing_forms_unchanged_by_windows_arm64_support():
 def test_explicit_declared_linux_policies_preserve_exact_asset_platform(policy, platform):
     row = {**TARGETS[0], "manylinux": policy, "platform": platform}
     distribution = {"wheels": [row]}
-    assert wheel_targets(distribution)[0]["platform"] == platform
-    verify_platforms(distribution, [Path("example-1.2.3-cp39-abi3-" + platform + ".whl")])
+    assert wheel_targets(distribution, continuity=True)[0]["platform"] == platform
+    verify_platforms(distribution, [Path("example-1.2.3-cp39-abi3-" + platform + ".whl")], continuity=True)
     with pytest.raises(ValueError):
-        verify_platforms(distribution, [Path("example-1.2.3-cp39-abi3-manylinux_2_28_x86_64.whl")])
+        verify_platforms(distribution, [Path("example-1.2.3-cp39-abi3-manylinux_2_28_x86_64.whl")], continuity=True)
 
 
 def test_compound_wheel_platform_cannot_silently_replace_a_single_declared_tag():
     with pytest.raises(ValueError):
         verify_platforms({"wheels": [TARGETS[0]]},
-                        [Path("example-1.2.3-cp39-abi3-manylinux_2_28_x86_64.linux_x86_64.whl")])
+                        [Path("example-1.2.3-cp39-abi3-manylinux_2_28_x86_64.linux_x86_64.whl")], continuity=True)
+
+
+
+def test_nonadopter_preserves_old_linux_policy_and_compound_subset_matching():
+    distribution = {"wheels": [TARGETS[0]]}
+    verify_platforms(distribution, [Path("example-1.2.3-cp39-abi3-manylinux_2_28_x86_64.linux_x86_64.whl")])
+    with pytest.raises(ValueError, match="manylinux=2_28"):
+        wheel_targets({"wheels": [{**TARGETS[0], "manylinux": "2_34", "platform": "manylinux_2_34_x86_64"}]})

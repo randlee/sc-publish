@@ -148,8 +148,7 @@ jobs:
           RELEASE_SHA: ${{ steps.release_gate.outputs.release_sha }}
         run: |
           set -euo pipefail
-          git show "$RELEASE_SHA:$RELEASE_ARTIFACT_MANIFEST" > "$RUNNER_TEMP/go-release-manifest.toml"
-          plan="$(python3 .github/scripts/go_release.py plan --manifest "$RUNNER_TEMP/go-release-manifest.toml")"
+          plan="$(python3 .github/scripts/go_release.py plan --manifest "$RELEASE_ARTIFACT_MANIFEST" --source-ref "$RELEASE_SHA")"
           echo "enabled=$(jq -r '.enabled' <<<"$plan")" >> "$GITHUB_OUTPUT"
 
       - name: Ensure tag is correct or create it
@@ -539,7 +538,7 @@ jobs:
         if: ${{ matrix.platform != '' }}
         env:
           WHEEL_PLATFORM: ${{ matrix.platform }}
-        run: python3 .github/scripts/release_python.py --asset-dir dist --platform "$WHEEL_PLATFORM"
+        run: python3 .github/scripts/release_python.py --asset-dir dist --platform "$WHEEL_PLATFORM" --manifest "$RELEASE_ARTIFACT_MANIFEST"
       - uses: actions/upload-artifact@v6
         with:
           name: python-wheel-${{ matrix.artifact }}-${{ matrix.id || matrix.os }}

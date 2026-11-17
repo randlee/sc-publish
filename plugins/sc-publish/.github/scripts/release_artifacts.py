@@ -407,7 +407,7 @@ def cmd_validate_manifest(args: argparse.Namespace) -> int:
         if not isinstance(distribution["sdist"], bool):
             raise SystemExit(f"[[python_distributions]] #{index}: sdist must be a boolean")
         wheels = distribution["wheels"]
-        wheel_targets(distribution)
+        wheel_targets(distribution, continuity="publication_continuity" in manifest)
         cargo_manifest = distribution.get("cargo_manifest")
         if cargo_manifest and not (Path(cargo_manifest)).is_file():
             raise SystemExit(
@@ -680,7 +680,7 @@ def cmd_verify_python_release_assets(args: argparse.Namespace) -> int:
             f"expected {expected}, found {found}"
         )
     for distribution in _python_distribution_entries(manifest):
-        verify_platforms(distribution, wheel_paths[distribution["name"]])
+        verify_platforms(distribution, wheel_paths[distribution["name"]], continuity="publication_continuity" in manifest)
     print(f"verified Python release assets: {expected}")
     return 0
 

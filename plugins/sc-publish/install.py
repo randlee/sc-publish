@@ -288,7 +288,7 @@ def load_install_values(path: Path) -> dict[str, object]:
     for position, distribution in enumerate(distributions, start=1):
         _require_boolean(distribution.get("sdist"), f"python_distributions[{position}].sdist")
         try:
-            wheel_targets(distribution)
+            wheel_targets(distribution, continuity="publication_continuity" in values)
         except (ValueError, KeyError) as error:
             raise argparse.ArgumentTypeError(f"python_distributions[{position}]: {error}") from error
         cargo_manifest = distribution.get("cargo_manifest")

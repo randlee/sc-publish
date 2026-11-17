@@ -231,17 +231,32 @@ def publish(manifest, directory, version, commit, *, run=execute):
             env=dict(os.environ, GOPROXY="https://proxy.golang.org", GONOPROXY="none", GOPRIVATE=""))
 
 
+def read_manifest(path, source_ref=None):
+    if source_ref:
+        if Path(path).is_absolute() or ":" in path or "\\" in path or ".." in PurePosixPath(path).parts:
+            raise GoReleaseError("--source-ref requires a repository-relative manifest path")
+        commit = execute(["git", "rev-parse", "--verify", source_ref + "^{commit}"])
+        entry = execute(["git", "ls-tree", "--name-only", commit, "--", path])
+        if not entry:
+            return {}
+        return tomllib.loads(execute(["git", "show", f"{commit}:{path}"]))
+    return tomllib.loads(Path(path).read_text())
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("command", choices=["plan", "prepare", "build", "verify", "publish", "release-tag"])
     parser.add_argument("--manifest", default="release/publish-artifacts.toml")
+    parser.add_argument("--source-ref", help="read-only committed manifest lookup for plan")
     parser.add_argument("--artifact")
     parser.add_argument("--version")
     parser.add_argument("--commit")
     parser.add_argument("--directory", type=Path, default=Path("go-bundles"))
     args = parser.parse_args()
     try:
-        manifest = tomllib.loads(Path(args.manifest).read_text())
+        if args.source_ref and args.command != "plan":
+            raise GoReleaseError("--source-ref is only supported for read-only plan")
+        manifest = read_manifest(args.manifest, args.source_ref)
         rows = configuration(manifest)
         if args.command == "plan":
             print(json.dumps({"enabled": bool(rows), "matrix": matrix(manifest)}, separators=(",", ":")))

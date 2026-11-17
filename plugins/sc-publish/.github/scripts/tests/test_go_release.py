@@ -223,3 +223,56 @@ def test_go_adopter_tag_step_defers_all_mutation_and_preserves_build_ref(tmp_pat
     result = subprocess.run(["bash", "-c", script], env=env, capture_output=True, text=True, timeout=10)
     assert result.returncode == 0, result.stderr
     assert output.read_text() == "build_ref=" + "a" * 40 + "\n"
+
+
+
+@pytest.mark.parametrize("command", ["plan", "verify", "release-tag"])
+def test_non_go_cli_noops_without_go_git_or_bundle_directory(tmp_path, command):
+    import json
+    import os
+    manifest = tmp_path / "manifest.toml"; manifest.write_text("schema_version=1\n")
+    script = Path(__file__).parents[1] / "go_release.py"
+    result = subprocess.run([sys.executable, str(script), command, "--manifest", str(manifest)],
+                            cwd=tmp_path, env=dict(os.environ, PATH=""), capture_output=True, text=True, timeout=10)
+    assert result.returncode == 0, result.stderr
+    if command == "plan": assert json.loads(result.stdout) == {"enabled": False, "matrix": {"include": []}}
+    assert not (tmp_path / "go-bundles").exists()
+
+
+@pytest.mark.parametrize("missing", [False, True])
+def test_release_declaration_reads_non_go_commit_even_without_committed_manifest(tmp_path, missing):
+    def git(*args):
+        return go.execute(["git", *args], cwd=tmp_path)
+    git("init"); git("config", "user.name", "Fixture"); git("config", "user.email", "fixture@example.test")
+    (tmp_path / "manifest.toml").write_text("schema_version=1\n")
+    git("add", "manifest.toml"); git("commit", "-m", "fixture")
+    script = Path(__file__).parents[1] / "go_release.py"
+    result = subprocess.run([sys.executable, str(script), "plan", "--manifest",
+                             "missing.toml" if missing else "manifest.toml", "--source-ref", "HEAD"],
+                            cwd=tmp_path, capture_output=True, text=True, timeout=10)
+    import json
+    assert result.returncode == 0, result.stderr
+    assert json.loads(result.stdout) == {"enabled": False, "matrix": {"include": []}}
+
+
+def test_non_go_workflow_conditions_admit_normal_publication():
+    import re
+    workflows = Path(__file__).parents[2] / "workflows"
+    jobs = yaml.safe_load((workflows / "release.yml").read_text())["jobs"]
+    values = {"needs.go-plan.outputs.enabled": "false", "needs.go-plan.result": "success",
+              "needs.build-go-modules.result": "skipped", "needs.go-verified.result": "success",
+              "needs.release-plan.outputs.has_crates": "true",
+              "needs.gate-and-tag.outputs.crates_already_published": "false",
+              "needs.build.result": "skipped", "needs.build-python-wheels.result": "success",
+              "needs.build-python-sdists.result": "skipped"}
+    def admitted(expression):
+        expression = expression.removeprefix("${{").removesuffix("}}").strip()
+        expression = re.sub(r"needs\.[A-Za-z0-9_.-]+", lambda match: repr(values[match.group()]), expression)
+        expression = expression.replace("!failure()", "True").replace("!cancelled()", "True")
+        expression = expression.replace("&&", " and ").replace("||", " or ")
+        return eval(" ".join(expression.split()), {"__builtins__": {}}, {})
+    assert admitted(jobs["go-verified"]["if"])
+    for name, target in [("publish", "production"), ("publish-testpypi", "testpypi"), ("release", "production")]:
+        values["needs.gate-and-tag.outputs.release_target"] = target
+        assert admitted(jobs[name]["if"]), name
+        assert "go-verified" in jobs[name]["needs"]

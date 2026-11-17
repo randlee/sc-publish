@@ -106,7 +106,7 @@ def planned_asset_patterns(manifest):
         name = re.escape(row["name"]).replace(r"\-", "[-_]")
         if row.get("sdist"):
             patterns.append(rf"^{name}-[^/]+\.tar\.gz$")
-        for wheel in wheel_targets(row):
+        for wheel in wheel_targets(row, continuity=True):
             platform = wheel_platform_pattern(manifest, row, wheel)
             patterns.append(rf"^{name}-[^/]+-{platform}\.whl$")
     for row in manifest.get("npm_packages", []):

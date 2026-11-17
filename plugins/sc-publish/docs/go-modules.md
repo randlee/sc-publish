@@ -58,3 +58,16 @@ The publication procedure follows the [Go module publishing guide](https://go.de
 Continuity treats the Go module path and each native ZIP as publication
 identities. Its Go tag baseline covers exactly the previous GitHub release
 version, so independently versioned submodules are outside that baseline.
+
+
+Go preflight jobs run outside the existing channel summary/deny step. Their
+individual job results and the `go-verified` job must pass for the entire
+preflight workflow to pass; the channel summary alone is not Go qualification.
+The root-module source `.` is currently rejected: this artifact kind supports
+repository-relative subdirectories and their `<source>/v<version>` tags only.
+Each command has a 900-second timeout. Independent consumer qualification runs
+`go mod tidy` and can require network access to resolve its dependencies.
+
+Exact compound wheel matching and additional manylinux policies apply only
+when publication continuity is declared. Other consumers retain the existing
+manylinux 2_28-only policy and compound-tag subset matching.
