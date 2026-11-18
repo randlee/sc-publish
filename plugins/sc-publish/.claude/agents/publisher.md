@@ -213,6 +213,15 @@ exist; run `Release Preflight` and report its sanitized result.
    Preflight and root Release `already_published_channels` workflow inputs.
    Do not infer it from a registry lookup or include a channel without that
    prior passed evidence; leave the input empty when no channel qualifies.
+   For an explicitly authorized partial `crates_io` retry, when the failed
+   result records that some manifest crates at this exact version were
+   published, include `crates_io` in both inputs to permit the exact-version
+   preflight exception. This does not change the channel's failed result into
+   a passed result. Re-run the root Release workflow for the same authorized
+   version and release ref. Its crates job probes every manifest crate,
+   skips those already live at that version, and publishes only missing
+   crates in manifest order. Do not bump the version to recover a partial
+   crates.io publication.
 3. Run the root release workflow only when explicitly assigned and only after
    the shared release-state policy's final `main` preflight passes. It owns tag
    creation and produces the immutable GitHub Release assets.
@@ -294,11 +303,11 @@ The root crates.io job is an exception to the post-release channel rule only
 because it is manifest-idempotent. For a partial crates.io result, retain one
 outcome per manifest crate (`published`, `already-live`, or `failed`) in the
 root channel verification evidence. With explicit named-coordinator authorization,
-rerun only the failed crates.io job on the same authorized release ref and
-tag. It must read the full ordered manifest, skip every `already-live` crate,
-and attempt only the missing crate set. Never bump a version merely because a
-new crate was absent during the first run, and never rerun artifact builds,
-tagging, GitHub Release creation, or a successful post-release channel.
+rerun the root Release workflow for the same authorized release ref and tag.
+Its crates job must read the full ordered manifest, skip every `already-live`
+crate, and attempt only the missing crate set. Never bump a version merely
+because a new crate was absent during the first run, and never rerun a
+successful post-release channel.
 
 ## Error Handling
 

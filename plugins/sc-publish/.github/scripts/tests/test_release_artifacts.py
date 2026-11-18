@@ -4026,28 +4026,17 @@ def test_upload_and_verification_use_the_isolated_asset_directory():
     assert "release/*" not in upload
 
 
-@pytest.mark.parametrize(
-    ("channels", "expected"),
-    [
-        ("", "false"),
-        ("github_release", "false"),
-        ("crates_io", "true"),
-        ("github_release, crates_io ", "true"),
-        ("crates_io,github_release", "true"),
-        ("not_crates_io", "false"),
-    ],
-)
-def test_retry_channel_selection_skips_only_preserved_crates(tmp_path, channels, expected):
-    output = tmp_path / "output"
-    run_step("Read channel retry selection", tmp_path, {
-        "ALREADY_PUBLISHED_CHANNELS": channels,
-        "GITHUB_OUTPUT": str(output),
-    })
-    assert output.read_text() == f"crates_already_published={expected}\n"
+def test_partial_crates_retry_runs_idempotent_publish_job():
     text = WORKFLOW.read_text(encoding="utf-8")
-    assert "crates_already_published: ${{ steps.retry_channels.outputs.crates_already_published }}" in text
+    publisher = (Path(__file__).parents[3] / ".claude/agents/publisher.md").read_text(encoding="utf-8")
     publish_condition = re.search(r"\n  publish:\n    if: (.+)", text).group(1)
-    assert "needs.gate-and-tag.outputs.crates_already_published != 'true'" in publish_condition
+    assert "needs.gate-and-tag.outputs.crates_already_published" not in publish_condition
+    assert "needs.gate-and-tag.outputs.release_target == 'production'" in publish_condition
+    assert "needs.release-plan.outputs.has_crates == 'true'" in publish_condition
+    assert 'echo "${crate} ${version} already published; skipping"' in text
+    assert 'list-publish-plan --include-manifest --include-visibility' in text
+    assert "include `crates_io` in both inputs" in publisher
+    assert "publishes only missing" in publisher
 
 
 def test_staging_paths_use_the_runner_temporary_directory(tmp_path):
