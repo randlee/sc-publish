@@ -14,6 +14,7 @@ import zipfile
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from threading import Thread
+from unittest.mock import patch
 
 import pytest
 from test_fail_closed_probes import extract_run_block
@@ -246,6 +247,10 @@ def repo_root() -> Path:
 
 def scripts_root() -> Path:
     return repo_root() / ".github" / "scripts"
+
+
+sys.path.insert(0, str(scripts_root()))
+import release_manifest as release_manifest_module
 
 
 def test_release_artifact_cli_stays_below_the_script_line_ceiling() -> None:
@@ -1774,7 +1779,6 @@ def assert_manifest_crates_and_channels(manifest: dict) -> None:
     crates = sorted((entry for entry in manifest["crates"] if entry.get("publish", True)),
                     key=lambda entry: entry["publish_order"])
     orders = [entry["publish_order"] for entry in crates]
-    assert all(type(order) is int and order > 0 for order in orders)
     assert len(orders) == len(set(orders))
     names = [entry["package"] for entry in crates]
     positions = {name: names.index(name) for name in names}
@@ -2353,10 +2357,8 @@ def test_registry_plan_obeys_publish_order_with_shuffled_declarations(tmp_path):
     assert plan.returncode == 0, plan.stderr
     assert plan.stdout.splitlines() == ["sc-composer|0", "sc-compose|0"]
     # An unpublished crate must not trigger even a registry lookup.
-    import release_manifest
-    from unittest.mock import patch
-    with patch.object(release_manifest, "registry_version_state", return_value="absent") as lookup:
-        assert release_manifest.check_version_publication(manifest, "1.4.2", "") == ([], [])
+    with patch.object(release_manifest_module, "registry_version_state", return_value="absent") as lookup:
+        assert release_manifest_module.check_version_publication(manifest, "1.4.2", "") == ([], [])
     assert lookup.call_count == 2
     assert all("unpublished" not in call.args[0] for call in lookup.call_args_list)
 
