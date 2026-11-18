@@ -1770,10 +1770,11 @@ def test_verify_python_release_assets_accepts_manifest_declared_wheels_and_sdist
 
 
 def assert_manifest_crates_and_channels(manifest: dict) -> None:
-    """Check ordered crate declarations and every configured channel."""
-    crates = [entry for entry in manifest["crates"] if entry.get("publish", True)]
+    """Check declared publish order, independent of TOML declaration order."""
+    crates = sorted((entry for entry in manifest["crates"] if entry.get("publish", True)),
+                    key=lambda entry: entry["publish_order"])
     orders = [entry["publish_order"] for entry in crates]
-    assert orders == sorted(orders)
+    assert all(type(order) is int and order > 0 for order in orders)
     assert len(orders) == len(set(orders))
     names = [entry["package"] for entry in crates]
     positions = {name: names.index(name) for name in names}
@@ -1801,8 +1802,9 @@ def test_release_manifest_publishes_sc_sha_before_its_consumers() -> None:
     assert_manifest_crates_and_channels(require_manifest_crates())
 
 
+@pytest.mark.parametrize("reverse", [False, True])
 @pytest.mark.parametrize("channels", [None, {}, {"pypi": {"workflow": "publish.yml", "dispatch_inputs": {}}}])
-def test_manifest_crate_checks_accept_optional_and_configured_channels(channels: dict | None) -> None:
+def test_manifest_crate_checks_accept_optional_and_configured_channels(channels: dict | None, reverse: bool) -> None:
     crates = [
         {"artifact": name, "package": name, "cargo_toml": f"{name}/Cargo.toml",
          "publish_order": order, "wait_after_publish_seconds": 0}
@@ -1811,6 +1813,8 @@ def test_manifest_crate_checks_accept_optional_and_configured_channels(channels:
     manifest = {"crates": crates}
     if channels is not None:
         manifest["channels"] = channels
+    if reverse:
+        manifest["crates"] = list(reversed(crates))
     assert_manifest_crates_and_channels(manifest)
     crates[1]["publish_order"] = 1
     with pytest.raises(AssertionError):
@@ -2319,7 +2323,8 @@ def test_public_registry_check_plan_assigns_named_agents_and_normalizes_python_n
     crates = [entry for entry in checks if entry["channel"] == "crates_io"]
     pypi = [entry for entry in checks if entry["channel"] == "pypi"]
     assert [entry["name"] for entry in crates] == [
-        entry["package"] for entry in manifest["crates"]
+        entry["package"] for entry in sorted(manifest["crates"], key=lambda entry: (entry["publish_order"], entry["artifact"]))
+        if entry.get("publish", True)
     ]
     assert all(entry["agent"] == "crates-io-publisher" for entry in crates)
     assert all(entry["version_policy"] == "must_be_absent" for entry in crates)
@@ -2329,6 +2334,31 @@ def test_public_registry_check_plan_assigns_named_agents_and_normalizes_python_n
         assert all(entry["agent"] == "pypi-publisher" for entry in pypi)
         assert all("_" not in entry["normalized_name"] for entry in pypi)
         assert any(entry["version_policy"] == "informational" for entry in pypi)
+
+
+def test_registry_plan_obeys_publish_order_with_shuffled_declarations(tmp_path):
+    _, manifest = write_repo_fixture(tmp_path, manifest_wheels=["ubuntu-latest"], include_python=False)
+    text = manifest.read_text()
+    blocks = re.findall(r"\[\[crates\]\]\n.*?(?=\n\[|\Z)", text, re.S)
+    assert len(blocks) == 2
+    unpublished = blocks[0].replace('sc-composer', 'unpublished').replace('publish = true', 'publish = false').replace('publish_order = 1', 'publish_order = 0')
+    text = text.replace(blocks[0], 'CRATE_PLACEHOLDER').replace(blocks[1], blocks[0]).replace('CRATE_PLACEHOLDER', unpublished + "\n" + blocks[1])
+    manifest.write_text(text)
+    assert_manifest_crates_and_channels(tomllib.loads(text))
+    result = run_fixture_command(tmp_path, "public-registry-check-plan", "--version", "1.4.2", manifest=manifest)
+    assert result.returncode == 0, result.stderr
+    checks = json.loads(result.stdout)["checks"]
+    assert [entry["name"] for entry in checks if entry["channel"] == "crates_io"] == ["sc-composer", "sc-compose"]
+    plan = run_fixture_command(tmp_path, "list-publish-plan", manifest=manifest)
+    assert plan.returncode == 0, plan.stderr
+    assert plan.stdout.splitlines() == ["sc-composer|0", "sc-compose|0"]
+    # An unpublished crate must not trigger even a registry lookup.
+    import release_manifest
+    from unittest.mock import patch
+    with patch.object(release_manifest, "registry_version_state", return_value="absent") as lookup:
+        assert release_manifest.check_version_publication(manifest, "1.4.2", "") == ([], [])
+    assert lookup.call_count == 2
+    assert all("unpublished" not in call.args[0] for call in lookup.call_args_list)
 
 
 def test_public_registry_inquiry_plan_is_contract_derived_and_read_only() -> None:
