@@ -670,6 +670,8 @@ def check_version_publication(
     }
     unexpected, preserved = [], []
     for crate in manifest["crates"]:
+        if not crate.get("publish", True):
+            continue
         check = _public_registry_checks(
             manifest["channel_contracts"], "crates_io", crate["package"], version
         )[0]
@@ -791,6 +793,8 @@ def cmd_list_publish_plan(args: object) -> int:
     """Render the ordered plan, retaining the legacy fields unless requested."""
     manifest = load_manifest(Path(args.manifest))
     for crate in manifest["crates"]:
+        if not crate.get("publish", True):
+            continue
         row = f"{crate['package']}|{crate['wait_after_publish_seconds']}"
         if args.include_manifest:
             row += f"|{crate['cargo_toml']}"
