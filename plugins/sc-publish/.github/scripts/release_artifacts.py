@@ -187,7 +187,7 @@ def cmd_public_registry_check_plan(args: argparse.Namespace) -> int:
     manifest = load_manifest(Path(args.manifest), with_channel_contracts=True)
     checks: list[dict[str, str | None]] = []
 
-    for crate in manifest["crates"]:
+    for crate in (entry for entry in manifest["crates"] if entry.get("publish", True)):
         checks.extend(
             _public_registry_checks(
                 manifest["channel_contracts"], "crates_io", crate["package"], args.version
